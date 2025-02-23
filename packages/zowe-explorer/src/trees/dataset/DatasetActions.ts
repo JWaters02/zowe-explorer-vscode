@@ -1898,19 +1898,19 @@ export class DatasetActions {
                 label: vscode.l10n.t("Use Regex"),
                 description: vscode.l10n.t("Should your search string be considered a regular expression?"),
                 picked: false,
+                alwaysShow: true,
                 iconPath: new vscode.ThemeIcon("regex"),
             },
             {
                 label: vscode.l10n.t("Case Sensitive"),
                 description: vscode.l10n.t("Should your search be case sensitive?"),
-                picked: true,
+                picked: false,
+                alwaysShow: true,
                 iconPath: new vscode.ThemeIcon("case-sensitive"),
             },
         ];
         quickPick.canSelectMany = true;
         quickPick.ignoreFocusOut = true;
-        quickPick.matchOnDescription = false;
-        quickPick.matchOnDetail = false;
 
         quickPick.show();
 
