@@ -45,6 +45,8 @@ interface ISearchOptions {
     node: IZoweDatasetTreeNode;
     pattern: string;
     searchString: string;
+    regex: boolean;
+    caseSensitive: boolean;
 }
 
 export class DatasetActions {
@@ -1888,82 +1890,116 @@ export class DatasetActions {
             return;
         }
 
-        // Figure out what text we are looking for.
-        const searchString = await Gui.showInputBox({ prompt: vscode.l10n.t("Enter the text to search for.") });
-        if (!searchString) {
-            Gui.showMessage(vscode.l10n.t("Operation Cancelled"));
-            return;
-        }
-
-        // Perform the actual search.
-        const response: zosfiles.IZosFilesResponse = await Gui.withProgress(
+        // Create a Quick Pick with an input box and checkboxes for options
+        const quickPick = vscode.window.createQuickPick();
+        quickPick.placeholder = vscode.l10n.t("Enter the text to search for.");
+        quickPick.items = [
             {
-                location: vscode.ProgressLocation.Notification,
-                title: vscode.l10n.t({ message: 'Searching for "{0}"', args: [searchString], comment: "The string to search data sets for." }),
-                cancellable: true,
+                label: vscode.l10n.t("Use Regex"),
+                description: vscode.l10n.t("Should your search string be considered a regular expression?"),
+                picked: false,
+                iconPath: new vscode.ThemeIcon("regex"),
             },
-            async (progress, token) => {
-                return this.performSearch(progress, token, { node, pattern, searchString });
+            {
+                label: vscode.l10n.t("Case Sensitive"),
+                description: vscode.l10n.t("Should your search be case sensitive?"),
+                picked: true,
+                iconPath: new vscode.ThemeIcon("case-sensitive"),
+            },
+        ];
+        quickPick.canSelectMany = true;
+        quickPick.ignoreFocusOut = true;
+        quickPick.matchOnDescription = false;
+        quickPick.matchOnDetail = false;
+
+        quickPick.show();
+
+        quickPick.onDidAccept(async () => {
+            const searchString = quickPick.value;
+            if (!searchString) {
+                Gui.showMessage(vscode.l10n.t("Operation Cancelled"));
+                quickPick.dispose();
+                return;
             }
-        );
 
-        // Either the user cancelled the search, or a catastrophic error occurred and error handling has already been done.
-        if (response === undefined) {
-            return;
-        }
+            const options = quickPick.selectedItems;
+            const regex = options.some((option) => option.label === "Use Regex");
+            const caseSensitive = options.some((option) => option.label === "Case Sensitive");
 
-        // Prepare a list of matches in a format the table expects
-        const matches = this.getSearchMatches(node, response, generateFullUri, searchString);
+            quickPick.dispose();
 
-        // Prepare the table for display to the user
-        const table = new TableBuilder(context)
-            .title(vscode.l10n.t({ message: 'Search Results for "{0}"', args: [searchString], comment: "The string to search data sets for." }))
-            .options({
-                autoSizeStrategy: { type: "fitCellContents" },
-                pagination: true,
-                rowSelection: "multiple",
-                selectEverything: true,
-                suppressRowClickSelection: true,
-            })
-            .isView()
-            .rows(...matches)
-            .columns(
-                ...[
-                    {
-                        field: "name",
-                        headerName: vscode.l10n.t("Data Set Name"),
-                        filter: true,
-                        sort: "asc",
-                    } as Table.ColumnOpts,
-                    {
-                        field: "position",
-                        headerName: vscode.l10n.t("Position"),
-                        filter: false,
-                    },
-                    {
-                        field: "contents",
-                        headerName: vscode.l10n.t("Contents"),
-                        filter: true,
-                    },
-                    {
-                        field: "actions",
-                        hide: true,
-                    },
-                ]
-            )
-            .addRowAction("all", {
-                title: vscode.l10n.t("Open"),
-                command: "open",
-                callback: {
-                    fn: DatasetActions.openSearchAtLocation,
-                    typ: "multi-row",
+            // Perform the actual search.
+            const response: zosfiles.IZosFilesResponse = await Gui.withProgress(
+                {
+                    location: vscode.ProgressLocation.Notification,
+                    title: vscode.l10n.t({ message: 'Searching for "{0}"', args: [searchString], comment: "The string to search data sets for." }),
+                    cancellable: true,
                 },
-                type: "secondary",
-            })
-            .build();
+                async (progress, token) => {
+                    return this.performSearch(progress, token, { node, pattern, searchString, regex, caseSensitive });
+                }
+            );
 
-        // Show the table to the user.
-        await TableViewProvider.getInstance().setTableView(table);
+            // Either the user cancelled the search, or a catastrophic error occurred and error handling has already been done.
+            if (response === undefined) {
+                return;
+            }
+
+            // Prepare a list of matches in a format the table expects
+            const matches = this.getSearchMatches(node, response, generateFullUri, searchString);
+
+            // Prepare the table for display to the user
+            const table = new TableBuilder(context)
+                .title(vscode.l10n.t({ message: 'Search Results for "{0}"', args: [searchString], comment: "The string to search data sets for." }))
+                .options({
+                    autoSizeStrategy: { type: "fitCellContents" },
+                    pagination: true,
+                    rowSelection: "multiple",
+                    selectEverything: true,
+                    suppressRowClickSelection: true,
+                })
+                .isView()
+                .rows(...matches)
+                .columns(
+                    ...[
+                        {
+                            field: "name",
+                            headerName: vscode.l10n.t("Data Set Name"),
+                            filter: true,
+                            sort: "asc",
+                        } as Table.ColumnOpts,
+                        {
+                            field: "position",
+                            headerName: vscode.l10n.t("Position"),
+                            filter: false,
+                        },
+                        {
+                            field: "contents",
+                            headerName: vscode.l10n.t("Contents"),
+                            filter: true,
+                        },
+                        {
+                            field: "actions",
+                            hide: true,
+                        },
+                    ]
+                )
+                .addRowAction("all", {
+                    title: vscode.l10n.t("Open"),
+                    command: "open",
+                    callback: {
+                        fn: DatasetActions.openSearchAtLocation,
+                        typ: "multi-row",
+                    },
+                    type: "secondary",
+                })
+                .build();
+
+            // Show the table to the user.
+            await TableViewProvider.getInstance().setTableView(table);
+        });
+
+        await quickPick.show();
     }
 
     private static async openSearchAtLocation(this: void, _view: Table.View, data: Record<number, Table.RowData>): Promise<void> {
@@ -1994,10 +2030,8 @@ export class DatasetActions {
     }
 
     private static async continueSearchPrompt(this: void, dataSets: zosfiles.IDataSet[]): Promise<boolean> {
-        const MAX_DATASETS = 50;
-
         // If there are 50 matches or under, do not prompt the user for confirmation to continue
-        if (dataSets.length <= MAX_DATASETS) {
+        if (dataSets.length <= Constants.MAX_FILES_FOR_SEARCH_PROMPT) {
             return true;
         }
 
