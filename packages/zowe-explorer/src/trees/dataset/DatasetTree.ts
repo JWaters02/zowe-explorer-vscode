@@ -676,12 +676,45 @@ export class DatasetTree extends ZoweTreeProvider<IZoweDatasetTreeNode> implemen
             profileNodeInFavorites = await this.createProfileNodeForFavs(profileName);
         }
         if (SharedContext.isDsMember(node)) {
-            if (SharedContext.isFavoritePds(node.getParent())) {
-                // This only returns true for members whose PDS **node** is literally already in the Favorites section.
-                Gui.showMessage(vscode.l10n.t("PDS already in favorites"));
-                return;
+            // Get node's profile node in favorites
+            if (profileNodeInFavorites === undefined) {
+                // If favorite node for profile doesn't exist yet, create a new one for it
+                profileNodeInFavorites = await this.createProfileNodeForFavs(profileName);
             }
-            await this.addFavorite(node.getParent() as IZoweDatasetTreeNode);
+
+            // Create standalone member node for favorites
+            const memberNode = new ZoweDatasetNode({
+                label: node.label as string,
+                collapsibleState: vscode.TreeItemCollapsibleState.None,
+                parentNode: profileNodeInFavorites,
+                contextOverride: node.contextValue,
+                etag: await node.getEtag(),
+                profile: node.getProfile(),
+            });
+
+            // Preserve the command to open the file
+            memberNode.command = node.command;
+            memberNode.contextValue = SharedContext.asFavorite(memberNode);
+            memberNode.resourceUri = node.resourceUri;
+
+            // Add icon
+            const icon = IconGenerator.getIconByNode(memberNode);
+            if (icon) {
+                memberNode.iconPath = icon.path;
+            }
+
+            // Add to favorites if not already present
+            if (
+                !profileNodeInFavorites.children.find(
+                    (tempNode) => tempNode.label === memberNode.label && tempNode.contextValue === memberNode.contextValue
+                )
+            ) {
+                profileNodeInFavorites.children.push(memberNode);
+                SharedUtils.sortTreeItems(profileNodeInFavorites.children, Constants.DS_SESSION_CONTEXT + Constants.FAV_SUFFIX);
+                SharedUtils.sortTreeItems(this.mFavorites, Constants.FAV_PROFILE_CONTEXT);
+                this.updateFavorites();
+                this.refreshElement(this.mFavoriteSession);
+            }
             return;
         } else if (SharedContext.isDsSession(node)) {
             if (!node.pattern && !node.resourceUri.query?.includes("pattern=")) {

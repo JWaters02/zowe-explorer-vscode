@@ -622,7 +622,6 @@
       "Application name"
     ]
   },
-  "PDS already in favorites": "PDS already in favorites",
   "This will remove all favorited data sets items for profile {0}. Continue?/Profile name": {
     "message": "This will remove all favorited data sets items for profile {0}. Continue?",
     "comment": [

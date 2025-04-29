@@ -832,7 +832,6 @@
   "Error creating data set favorite node: {0} for profile {1}.": "",
   "Loading profile: {0} for data set favorites": "",
   "Error: You have Zowe data set favorites that refer to a non-existent CLI profile named: {0}.\n                    To resolve this, you can remove {0} from the Favorites section of Zowe Explorer's Data Sets view.\n                    Would you like to do this now? {1}": "",
-  "PDS already in favorites": "",
   "This will remove all favorited data sets items for profile {0}. Continue?": "",
   "Node does not exist. It may have been deleted.": "",
   "Prompting the user for a data set pattern": "",
