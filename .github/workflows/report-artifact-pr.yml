@@ -1,9 +1,5 @@
 name: Report VSIX Artifact in PR
 
-permissions:
-  contents: write
-  pull-requests: write
-
 on:
   pull_request:
     paths:
@@ -11,8 +7,12 @@ on:
       - packages/zowe-explorer-api/**
       - .github/workflows/report-artifact-pr.yml
 
+permissions:
+  contents: write
+  pull-requests: write
+
 jobs:
-  ze-build-artifact:
+  build-ze-artifact:
     runs-on: ubuntu-22.04
 
     timeout-minutes: 60
