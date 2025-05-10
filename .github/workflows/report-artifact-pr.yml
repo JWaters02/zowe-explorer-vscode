@@ -3,9 +3,9 @@ name: Report VSIX Artifact in PR (Placeholder)
 on:
   pull_request:
     paths:
-      - 'packages/zowe-explorer/**'
-      - 'packages/zowe-explorer-api/**'
-      - '.github/workflows/report-artifact-pr.yml'
+      - packages/zowe-explorer/**
+      - packages/zowe-explorer-api/**
+      - .github/workflows/report-artifact-pr.yml
 
 jobs:
   placeholder:
