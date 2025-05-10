@@ -6,6 +6,7 @@ on:
       - packages/zowe-explorer/**
       - packages/zowe-explorer-api/**
       - .github/workflows/report-artifact-pr.yml
+      - .github/resources/artifact-template.hbs
 
 permissions:
   contents: write
