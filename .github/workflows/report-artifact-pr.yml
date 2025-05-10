@@ -1,0 +1,14 @@
+name: Report VSIX Artifact in PR (Placeholder)
+
+on:
+  pull_request:
+    paths:
+      - 'packages/zowe-explorer/**'
+      - 'packages/zowe-explorer-api/**'
+      - '.github/workflows/report-artifact-pr.yml'
+
+jobs:
+  placeholder:
+    runs-on: ubuntu-22.04
+    steps:
+      - run: echo "Placeholder job for workflow."
