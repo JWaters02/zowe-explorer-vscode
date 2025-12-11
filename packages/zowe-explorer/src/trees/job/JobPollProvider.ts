@@ -30,6 +30,14 @@ class JobPollProvider implements vscode.FileDecorationProvider {
         JobPollProvider.fileDecorationsEmitter.fire(uri);
     }
 
+    public updateAllIcons(specificPaths?: string[]): void {
+        const paths = specificPaths || Object.keys(Poller.pollRequests);
+        const uris = paths.map((path) => vscode.Uri.parse(`jobs:${path}`));
+        if (uris.length > 0) {
+            JobPollProvider.fileDecorationsEmitter.fire(uris);
+        }
+    }
+
     public provideFileDecoration(uri: vscode.Uri, _token: vscode.CancellationToken): vscode.ProviderResult<vscode.FileDecoration> {
         const inPollQueue = Poller.pollRequests[uri.path];
         // Only show polling decoration beside URIs w/ valid poll requests

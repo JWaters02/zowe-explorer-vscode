@@ -10,7 +10,7 @@
  */
 
 import * as vscode from "vscode";
-import { IZoweJobTreeNode, IZoweTreeNode, ZoweScheme, imperative, Gui, PaginationCodeLens } from "@zowe/zowe-explorer-api";
+import { IZoweJobTreeNode, IZoweTreeNode, ZoweScheme, imperative, Gui, PaginationCodeLens, Poller } from "@zowe/zowe-explorer-api";
 import { JobTree } from "./JobTree";
 import { JobActions } from "./JobActions";
 import { ZoweJobNode } from "./ZoweJobNode";
@@ -142,6 +142,13 @@ export class JobInit {
         context.subscriptions.push(
             vscode.workspace.onDidChangeConfiguration(async (e) => {
                 await jobsProvider.onDidChangeConfiguration(e);
+            })
+        );
+        context.subscriptions.push(
+            vscode.commands.registerCommand("zowe.jobs.stopAllPolling", () => {
+                const disposedKeys = Poller.stopAllPolling();
+                PollProvider.updateAllIcons(disposedKeys);
+                Gui.infoMessage(vscode.l10n.t("All job polling has been stopped."));
             })
         );
         context.subscriptions.push(

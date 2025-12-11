@@ -39,6 +39,7 @@ import { JobTree } from "../../../../src/trees/job/JobTree";
 import { ZoweJobNode, ZoweSpoolNode } from "../../../../src/trees/job/ZoweJobNode";
 import { SharedTreeProviders } from "../../../../src/trees/shared/SharedTreeProviders";
 import { SharedUtils } from "../../../../src/trees/shared/SharedUtils";
+import { SharedContext } from "../../../../src/trees/shared/SharedContext";
 import { JobInit } from "../../../../src/trees/job/JobInit";
 import { Definitions } from "../../../../src/configuration/Definitions";
 

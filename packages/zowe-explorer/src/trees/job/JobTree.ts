@@ -1065,6 +1065,20 @@ export class JobTree extends ZoweTreeProvider<IZoweJobTreeNode> implements Types
     }
 
     /**
+     * Determine whether the job is active
+     * @param jobNode The job to check
+     * @returns true if the job is active/waiting; otherwise, false
+     */
+    private isJobActive(job: IJob): boolean {
+        ZoweLogger.trace("JobTree.isJobActive called.");
+        if (job && job.status) {
+            const jobStatus = job.status.toUpperCase();
+            return jobStatus === "ACTIVE" || jobStatus === "INPUT";
+        }
+        return false;
+    }
+
+    /**
      * Show poll options for the spool file matching the provided URI, before the user starts polling.
      * @returns true if the user started polling, false if they dismiss the dialog
      */
@@ -1114,6 +1128,38 @@ export class JobTree extends ZoweTreeProvider<IZoweJobTreeNode> implements Types
         Poller.addRequest(node.resourceUri.path, {
             msInterval: pollInterval,
             request: async () => {
+                try {
+                    // If job is completed before polling, stop polling
+                    const jobNode = node.getParent() as IZoweJobTreeNode;
+                    if (jobNode && SharedContext.isJob(jobNode) && jobNode.job) {
+                        // Get the actual job status without refreshing the whole job's node tree every poll request
+                        const actualJob = await ZoweExplorerApiRegister.getJesApi(node.getProfile()).getJob(jobNode.job.jobid);
+                        if (!this.isJobActive(actualJob)) {
+                            Poller.pollRequests[node.resourceUri.path].dispose = true;
+                            PollProvider.updateIcon(node.resourceUri);
+
+                            node.contextValue = node.contextValue.replace(Constants.POLL_CONTEXT, "");
+                            this.refreshElement(jobNode);
+
+                            await JobFSProvider.instance.fetchSpoolAtUri(node.resourceUri);
+                            this.mOnDidChangeTreeData.fire(jobNode);
+
+                            const actualJobStatus = actualJob.status?.toUpperCase();
+                            const spoolName = path.posix.basename(node.resourceUri.path);
+                            ZoweLogger.trace(`Stopped polling for ${spoolName} because job completed with status: ${actualJobStatus}`);
+                            return;
+                        }
+                    }
+                } catch (error) {
+                    ZoweLogger.error(
+                        vscode.l10n.t({
+                            message: "Error polling spool: {0}",
+                            args: [error instanceof Error ? error.message : String(error)],
+                            comment: ["Job display name", "Error message"],
+                        })
+                    );
+                }
+
                 const statusMsg = Gui.setStatusBarMessage(
                     `$(sync~spin) ${vscode.l10n.t({
                         message: "Polling: {0}...",

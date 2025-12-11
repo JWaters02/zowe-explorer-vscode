@@ -54,4 +54,12 @@ export class Poller {
     public static removeRequest(uniqueId: string): void {
         delete Poller.pollRequests[uniqueId];
     }
+
+    public static stopAllPolling(): string[] {
+        const disposedKeys = Object.keys(Poller.pollRequests);
+        disposedKeys.forEach((key) => {
+            Poller.pollRequests[key].dispose = true;
+        });
+        return disposedKeys;
+    }
 }

@@ -23,7 +23,7 @@ import { SharedInit } from "../../../../src/trees/shared/SharedInit";
 import { JobTableView } from "../../../../src/trees/job/JobTableView";
 import { JobFSProvider } from "../../../../src/trees/job/JobFSProvider";
 import { SettingsConfig } from "../../../../src/configuration/SettingsConfig";
-import { ZoweScheme } from "@zowe/zowe-explorer-api";
+import { ZoweScheme, Poller, Gui } from "@zowe/zowe-explorer-api";
 
 describe("Test src/jobs/extension", () => {
     describe("initJobsProvider", () => {
@@ -147,6 +147,10 @@ describe("Test src/jobs/extension", () => {
                 mock: [{ spy: jest.spyOn(jobsProvider, "pollActiveJobs"), arg: [test.value] }],
             },
             {
+                name: "zowe.jobs.stopAllPolling",
+                mock: [],
+            },
+            {
                 name: "zowe.jobs.cancelJob",
                 mock: [{ spy: jest.spyOn(JobActions, "cancelJobs"), arg: [jobsProvider, [exampleData.job]] }],
                 parm: [exampleData.job],
@@ -214,6 +218,33 @@ describe("Test src/jobs/extension", () => {
             spyCreateJobsTree.mockResolvedValue(null);
             const myProvider = await JobInit.initJobsProvider(test.context);
             expect(myProvider).toBe(null);
+        });
+    });
+
+    describe("stopAllPolling command", () => {
+        it("should call Poller.stopAllPolling and show info message", async () => {
+            const stopAllPollingSpy = jest.spyOn(Poller, "stopAllPolling");
+            const infoMessageSpy = jest.spyOn(Gui, "infoMessage");
+
+            // Create a mock command function based on the actual registration
+            const registerCommandSpy = jest.spyOn(vscode.commands, "registerCommand");
+            await JobInit.initJobsProvider({ subscriptions: [] } as any);
+
+            // Find the stopAllPolling command registration
+            const stopAllPollingCall = registerCommandSpy.mock.calls.find((call) => call[0] === "zowe.jobs.stopAllPolling");
+            expect(stopAllPollingCall).toBeDefined();
+
+            // Execute the command function
+            const commandFunction = stopAllPollingCall?.[1];
+            if (commandFunction) {
+                commandFunction();
+            }
+
+            expect(stopAllPollingSpy).toHaveBeenCalled();
+            expect(infoMessageSpy).toHaveBeenCalledWith(expect.stringContaining("All job polling has been stopped"));
+
+            stopAllPollingSpy.mockRestore();
+            infoMessageSpy.mockRestore();
         });
     });
 });

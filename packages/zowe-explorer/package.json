@@ -620,6 +620,11 @@
         "category": "Zowe Explorer"
       },
       {
+        "command": "zowe.jobs.stopAllPolling",
+        "title": "%stopAllPolling%",
+        "category": "Zowe Explorer"
+      },
+      {
         "command": "zowe.jobs.startPolling",
         "title": "%startPolling%",
         "category": "Zowe Explorer"
@@ -1721,6 +1726,9 @@
         {
           "command": "zowe.jobs.stopPolling",
           "when": "never"
+        },
+        {
+          "command": "zowe.jobs.stopAllPolling"
         },
         {
           "command": "zowe.jobs.startPollingActiveJobs",

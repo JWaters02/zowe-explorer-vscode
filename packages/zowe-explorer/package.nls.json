@@ -41,6 +41,7 @@
   "listDataSets": "List Data Sets",
   "startPolling": "Start Polling",
   "stopPolling": "Stop Polling",
+  "stopAllPolling": "Stop All Polling",
   "jobs.startPollingActiveJobs": "Start Polling Active Jobs",
   "jobs.stopPollingActiveJobs": "Stop Polling Active Jobs",
   "refreshNode": "Pull from Mainframe",
