@@ -633,7 +633,8 @@ export class USSActions {
 
         try {
             const profile = sessionNode.getProfile();
-            const response = await ZoweExplorerApiRegister.getUssApi(profile).fileList(ussPath);
+            // Use symlinks: false to follow symlinks, allowing symlinked paths to be resolved correctly
+            const response = await ZoweExplorerApiRegister.getUssApi(profile).fileList(ussPath, { symlinks: false, name: "*" });
 
             // we get 3 entries for a directory like ., .., and directory itself with mode d
             //For a file there will be single entry

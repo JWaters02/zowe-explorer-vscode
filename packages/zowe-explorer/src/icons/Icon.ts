@@ -86,6 +86,23 @@ export class Icon {
         },
     };
 
+    public static symlink: IconUtils.IIconItem = {
+        id: IconUtils.IconId.symlink,
+        type: IconUtils.IconHierarchyType.base,
+        path: Icon.getIconPathInResources("link.svg"),
+        check: (node) => SharedContext.isSymlink(node) && SharedContext.isFolder(node),
+    };
+
+    public static symlinkOpen: IconUtils.IIconItem = {
+        id: IconUtils.IconId.symlinkOpen,
+        type: IconUtils.IconHierarchyType.derived,
+        path: Icon.getIconPathInResources("link.svg"),
+        check: (node) => {
+            const parentCheck = Icon.symlink.check(node);
+            return parentCheck && node.collapsibleState === TreeItemCollapsibleState.Expanded;
+        },
+    };
+
     public static filterFolder: IconUtils.IIconItem = {
         id: IconUtils.IconId.filterFolder,
         type: IconUtils.IconHierarchyType.base,
@@ -211,6 +228,8 @@ export class Icon {
             Icon.sessionFavoriteOpen,
             Icon.folder,
             Icon.folderOpen,
+            Icon.symlink,
+            Icon.symlinkOpen,
             Icon.migrated,
             Icon.fileError,
             Icon.vsam,

@@ -91,12 +91,13 @@ export namespace MainframeInteraction {
          * Return the directory elements for a given USS path.
          *
          * @param {string} ussFilePath
+         * @param {zosfiles.IUSSListOptions} options - Optional list options
          * @returns {IZosFilesResponse}
          *     A response structure that contains a boolean success property
          *     as well as the list of results in apiResponse.items with
          *     minimal properties name, mode.
          */
-        fileList(ussFilePath: string): Promise<zosfiles.IZosFilesResponse>;
+        fileList(ussFilePath: string, options?: zosfiles.IUSSListOptions): Promise<zosfiles.IZosFilesResponse>;
 
         /**
          * Check th USS chtag to see if a file requires conversion.

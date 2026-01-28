@@ -130,6 +130,15 @@ export class SharedContext {
     }
 
     /**
+     * Helper function which identifies if the node is a symbolic link
+     * @param node
+     * @return true if a symbolic link, false otherwise
+     */
+    public static isSymlink(node: TreeItem): boolean {
+        return new RegExp(Constants.SYMLINK_SUFFIX).test(node.contextValue);
+    }
+
+    /**
      * Helper function which identifies if the node is a document
      * @param node
      * @return true if a document, false otherwise

@@ -30,6 +30,8 @@ export namespace IconUtils {
         "filterFolderOpen" = "filterFolderOpen",
         "folder" = "folder",
         "folderOpen" = "folderOpen",
+        "symlink" = "symlink",
+        "symlinkOpen" = "symlinkOpen",
         "migrated" = "migrated",
         "fileError" = "fileError",
         "vsam" = "vsam",

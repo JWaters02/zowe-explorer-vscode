@@ -200,9 +200,42 @@ export class UssFSProvider extends BaseProvider implements vscode.FileSystemProv
         await ProfilesUtils.awaitExtenderType(uriInfo.profileName, Profiles.getInstance());
 
         let response: IZosFilesResponse;
+        let symlinkResponse: IZosFilesResponse = null;
 
         await AuthUtils.retryRequest(profile, async () => {
-            response = await ZoweExplorerApiRegister.getUssApi(loadedProfile).fileList(ussPath);
+            const ussApi = ZoweExplorerApiRegister.getUssApi(loadedProfile);
+
+            // First call with follow mode to get the directory listing
+            response = await ussApi.fileList(ussPath, { symlinks: false, name: "*" });
+
+            // Only attempt symlink detection when listing directory contents (not for stat calls on individual files)
+            // keepRelative=true is used by stat() for individual file lookups, so skip symlink detection in that case
+            if (!keepRelative) {
+                // Log the response for debugging
+                ZoweLogger.trace(
+                    `[UssFSProvider] listFiles response for ${ussPath}: success=${String(response.success)}, ` +
+                        `itemCount=${String(response.apiResponse?.items?.length ?? 0)}`
+                );
+
+                // Only attempt symlink detection if this is a directory (has multiple items)
+                // Files return a single item, directories return multiple items
+                const isDirectory = response.success && response.apiResponse?.items?.length > 1;
+
+                if (isDirectory) {
+                    // Try to call with report mode to detect which items are symlinks
+                    // name: "*" is required as symlinks option requires at least one filter parameter
+                    // This may fail if there are broken symlinks in the directory, so we handle errors gracefully
+                    try {
+                        symlinkResponse = await ussApi.fileList(ussPath, { symlinks: true, name: "*" });
+                    } catch (symlinkErr) {
+                        // If report mode fails (e.g., broken symlinks cause readlink() errors),
+                        // log the error and continue without symlink detection
+                        const errMsg = symlinkErr instanceof Error ? symlinkErr.message : String(symlinkErr);
+                        ZoweLogger.warn(`[UssFSProvider] Failed to detect symlinks in ${ussPath}: ${errMsg}`);
+                        symlinkResponse = null;
+                    }
+                }
+            }
 
             // If request was successful, create directories for the path if it doesn't exist
             if (response.success && !keepRelative && response.apiResponse.items?.[0]?.mode?.startsWith("d") && !this.exists(uri)) {
@@ -210,11 +243,30 @@ export class UssFSProvider extends BaseProvider implements vscode.FileSystemProv
             }
         });
 
+        // Merge symlink information: mark items that were symlinks in the report response
+        const symlinkNames = new Set<string>();
+        if (symlinkResponse?.success && symlinkResponse.apiResponse?.items) {
+            for (const item of symlinkResponse.apiResponse.items) {
+                // Symlinks have mode starting with 'l'
+                if (item.mode?.startsWith("l")) {
+                    symlinkNames.add(item.name as string);
+                }
+            }
+        }
+
+        // Add isSymlink property to items that were detected as symlinks
+        const items = (response.apiResponse.items ?? [])
+            .filter(keepRelative ? Boolean : (it: Record<string, unknown>): boolean => !/^\.{1,3}$/.test(it.name as string))
+            .map((item: Record<string, unknown>) => ({
+                ...item,
+                isSymlink: symlinkNames.has(item.name as string),
+            }));
+
         return {
             ...response,
             apiResponse: {
                 ...response.apiResponse,
-                items: (response.apiResponse.items ?? []).filter(keepRelative ? Boolean : (it): boolean => !/^\.{1,3}$/.test(it.name as string)),
+                items,
             },
         };
     }
@@ -865,7 +917,8 @@ export class UssFSProvider extends BaseProvider implements vscode.FileSystemProv
         const hasCopyApi = api.copy != null;
 
         // Get the up-to-date list of files in the destination directory
-        const apiResponse = await api.fileList(path.posix.join(destInfo.path));
+        // Use symlinks: false to follow symlinks, allowing proper resolution of symlinked directories
+        const apiResponse = await api.fileList(path.posix.join(destInfo.path), { symlinks: false, name: "*" });
         if (!apiResponse.success) {
             throw vscode.FileSystemError.Unavailable(
                 vscode.l10n.t({
