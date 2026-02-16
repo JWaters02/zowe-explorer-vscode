@@ -30,6 +30,7 @@ import { ProfileManagement } from "../../management/ProfileManagement";
 import { Definitions } from "../../configuration/Definitions";
 import { ZoweLocalStorage } from "../../tools/ZoweLocalStorage";
 import { USSUtils } from "./USSUtils";
+import { DownloadOptionsView } from "../shared/DownloadOptionsView";
 
 export class USSActions {
     /**
@@ -502,7 +503,11 @@ export class USSActions {
         return newFilterOptions;
     }
 
-    private static async getUssDownloadOptions(node: IZoweUSSTreeNode, isDirectory: boolean = false): Promise<Definitions.UssDownloadOptions> {
+    private static async getUssDownloadOptions(
+        node: IZoweUSSTreeNode,
+        isDirectory: boolean = false,
+        context?: vscode.ExtensionContext
+    ): Promise<Definitions.UssDownloadOptions> {
         const downloadOpts: Definitions.UssDownloadOptions =
             ZoweLocalStorage.getValue<Definitions.UssDownloadOptions>(Definitions.LocalStorageKey.USS_DOWNLOAD_OPTIONS) ?? {};
 
@@ -521,128 +526,92 @@ export class USSActions {
             downloadOpts.encoding = undefined;
         }
 
-        const getEncodingDescription = (): string => {
-            if (isDirectory) {
-                const currentEncoding = downloadOpts.dirOptions.directoryEncoding;
-                if (!currentEncoding || currentEncoding === "auto-detect") {
-                    return vscode.l10n.t("Select default encoding for directory files (current: Auto-detect from file tags)");
-                }
-
-                const encodingName =
-                    currentEncoding.kind === "binary" ? "binary" : currentEncoding.kind === "other" ? currentEncoding.codepage : "EBCDIC";
-
-                return vscode.l10n.t("Select default encoding for directory files (current: {0})", encodingName);
-            } else {
-                if (!downloadOpts.encoding) {
-                    return vscode.l10n.t("Select specific encoding for file");
-                }
-
-                const encodingName =
-                    downloadOpts.encoding.kind === "binary"
-                        ? "binary"
-                        : downloadOpts.encoding.kind === "other"
-                        ? downloadOpts.encoding.codepage
-                        : "EBCDIC";
-
-                return vscode.l10n.t("Select specific encoding for file (current: {0})", encodingName);
-            }
-        };
-
-        const optionItems: vscode.QuickPickItem[] = [
+        const quickOptionItems: vscode.QuickPickItem[] = [
             {
                 label: vscode.l10n.t("Overwrite"),
-                description: isDirectory
-                    ? vscode.l10n.t("Overwrite existing files when downloading directories")
-                    : vscode.l10n.t("Overwrite existing file"),
+                description: vscode.l10n.t("Overwrite existing files"),
                 picked: downloadOpts.overwrite,
             },
             {
-                label: vscode.l10n.t("Generate Directory Structure"),
-                description: vscode.l10n.t("Generates sub-folders based on the entire USS path"),
-                picked: downloadOpts.generateDirectory,
+                label: vscode.l10n.t("Choose Encoding"),
+                description: vscode.l10n.t("Choose an encoding for this download"),
+                picked: downloadOpts.chooseEncoding,
             },
         ];
 
-        // Add directory-specific options only when downloading directories
-        if (isDirectory) {
-            optionItems.push(
-                {
-                    label: vscode.l10n.t("Follow Symlinks"),
-                    description: vscode.l10n.t("Follow symbolic links to their targets instead of returning them"),
-                    picked: downloadOpts.dirOptions.followSymlinks,
-                },
-                {
-                    label: vscode.l10n.t("Apply Filter Options"),
-                    description:
-                        downloadOpts.dirFilterOptions && Object.keys(downloadOpts.dirFilterOptions).length > 0
-                            ? vscode.l10n.t("Configure and apply file filtering options (currently configured)")
-                            : vscode.l10n.t("Configure and apply file filtering options"),
-                    picked: downloadOpts.dirOptions.chooseFilterOptions,
-                }
-            );
-        }
+        const quickOptionsQuickPick = Gui.createQuickPick();
+        quickOptionsQuickPick.title = vscode.l10n.t("Quick Download Tweaks");
+        quickOptionsQuickPick.placeholder = vscode.l10n.t("Select frequently changed options");
+        quickOptionsQuickPick.ignoreFocusOut = true;
+        quickOptionsQuickPick.canSelectMany = true;
+        quickOptionsQuickPick.items = quickOptionItems;
+        quickOptionsQuickPick.selectedItems = quickOptionItems.filter((item) => item.picked);
 
-        // Put this here because it should be at the bottom of the quick pick for both files and directories
-        optionItems.push({
-            label: vscode.l10n.t("Choose Encoding"),
-            description: getEncodingDescription(),
-            picked: downloadOpts.chooseEncoding,
-        });
-
-        const optionsQuickPick = Gui.createQuickPick();
-        optionsQuickPick.title = vscode.l10n.t("Download Options");
-        optionsQuickPick.placeholder = vscode.l10n.t("Select download options");
-        optionsQuickPick.ignoreFocusOut = true;
-        optionsQuickPick.canSelectMany = true;
-        optionsQuickPick.items = optionItems;
-        optionsQuickPick.selectedItems = optionItems.filter((item) => item.picked);
-
-        const selectedOptions: vscode.QuickPickItem[] = await new Promise((resolve) => {
+        const selectedQuickOptions: vscode.QuickPickItem[] = await new Promise((resolve) => {
             let wasAccepted = false;
 
-            optionsQuickPick.onDidAccept(() => {
+            quickOptionsQuickPick.onDidAccept(() => {
                 wasAccepted = true;
-                resolve(Array.from(optionsQuickPick.selectedItems));
-                optionsQuickPick.hide();
+                resolve(Array.from(quickOptionsQuickPick.selectedItems));
+                quickOptionsQuickPick.hide();
             });
 
-            optionsQuickPick.onDidHide(() => {
+            quickOptionsQuickPick.onDidHide(() => {
                 if (!wasAccepted) {
                     resolve(null);
                 }
             });
 
-            optionsQuickPick.show();
+            quickOptionsQuickPick.show();
         });
-        optionsQuickPick.dispose();
+        quickOptionsQuickPick.dispose();
 
-        // Do this instead of checking for length because unchecking all options is a valid choice
-        if (selectedOptions === null) {
+        if (selectedQuickOptions === null) {
             return;
         }
 
-        const localizedLabels = {
-            overwrite: vscode.l10n.t("Overwrite"),
-            generateDirectory: vscode.l10n.t("Generate Directory Structure"),
-            chooseEncoding: vscode.l10n.t("Choose Encoding"),
-            followSymlinks: vscode.l10n.t("Follow Symlinks"),
-            applyFilterOptions: vscode.l10n.t("Apply Filter Options"),
-        };
+        const isQuickOptionSelected = (label: string): boolean => selectedQuickOptions.some((opt) => opt.label === label);
+        downloadOpts.overwrite = isQuickOptionSelected(vscode.l10n.t("Overwrite"));
+        downloadOpts.chooseEncoding = isQuickOptionSelected(vscode.l10n.t("Choose Encoding"));
 
-        const getOption = (localizedLabel: string): boolean => selectedOptions.some((opt) => opt.label === localizedLabel);
-        downloadOpts.overwrite = getOption(localizedLabels.overwrite);
-        downloadOpts.generateDirectory = getOption(localizedLabels.generateDirectory);
-        downloadOpts.chooseEncoding = getOption(localizedLabels.chooseEncoding);
+        const flowChoice = await Gui.showQuickPick([vscode.l10n.t("Continue download"), vscode.l10n.t("Open full options editor")], {
+            ignoreFocusOut: true,
+            canPickMany: false,
+            placeHolder: vscode.l10n.t("Continue with quick options or edit all saved settings"),
+        });
 
-        // Only set directory-specific options when downloading directories
-        if (isDirectory) {
-            downloadOpts.dirOptions.followSymlinks = getOption(localizedLabels.followSymlinks);
-            downloadOpts.dirOptions.chooseFilterOptions = getOption(localizedLabels.applyFilterOptions);
+        if (!flowChoice) {
+            return;
+        }
 
-            if (getOption(localizedLabels.applyFilterOptions)) {
-                const filterOptions = await USSActions.getUssDirFilterOptions(downloadOpts.dirFilterOptions);
-                if (filterOptions && Object.keys(filterOptions).length > 0) {
-                    downloadOpts.dirFilterOptions = filterOptions;
+        const openedWebview = flowChoice === vscode.l10n.t("Open full options editor");
+        if (openedWebview && context) {
+            const updatedOptions = await DownloadOptionsView.show(context, {
+                mode: isDirectory ? "uss-directory" : "uss-file",
+                options: downloadOpts as Record<string, unknown>,
+            });
+
+            if (!updatedOptions) {
+                return;
+            }
+
+            Object.assign(downloadOpts, updatedOptions as Definitions.UssDownloadOptions);
+            downloadOpts.overwrite ??= false;
+            downloadOpts.generateDirectory ??= false;
+            downloadOpts.chooseEncoding ??= false;
+            downloadOpts.dirOptions ??= {};
+            downloadOpts.dirOptions.followSymlinks ??= true;
+            downloadOpts.dirOptions.chooseFilterOptions ??= false;
+            downloadOpts.dirFilterOptions ??= {};
+            downloadOpts.dirFilterOptions.includeHidden ??= false;
+            downloadOpts.dirFilterOptions.filesys ??= false;
+        }
+
+        if (downloadOpts.dirFilterOptions) {
+            for (const key of Object.keys(downloadOpts.dirFilterOptions) as (keyof Definitions.UssDirFilterOptions)[]) {
+                const value = downloadOpts.dirFilterOptions[key];
+                if (value === "" || value == null) {
+                    delete downloadOpts.dirFilterOptions[key];
                 }
             }
         }
@@ -695,12 +664,12 @@ export class USSActions {
         return downloadOpts;
     }
 
-    public static async downloadUssFile(node: IZoweUSSTreeNode): Promise<void> {
+    public static async downloadUssFile(node: IZoweUSSTreeNode, context?: vscode.ExtensionContext): Promise<void> {
         ZoweLogger.trace("uss.actions.downloadUssFile called.");
 
         const profile = node.getProfile();
 
-        const downloadOptions = await USSActions.getUssDownloadOptions(node);
+        const downloadOptions = await USSActions.getUssDownloadOptions(node, false, context);
         if (!downloadOptions) {
             Gui.showMessage(vscode.l10n.t("Operation cancelled"));
             return;
@@ -734,7 +703,7 @@ export class USSActions {
         );
     }
 
-    public static async downloadUssDirectory(node: IZoweUSSTreeNode): Promise<void> {
+    public static async downloadUssDirectory(node: IZoweUSSTreeNode, context?: vscode.ExtensionContext): Promise<void> {
         ZoweLogger.trace("uss.actions.downloadUssDirectory called.");
 
         const profile = node.getProfile();
@@ -747,7 +716,7 @@ export class USSActions {
             return;
         }
 
-        const downloadOptions = await USSActions.getUssDownloadOptions(node, true);
+        const downloadOptions = await USSActions.getUssDownloadOptions(node, true, context);
         if (!downloadOptions) {
             Gui.showMessage(vscode.l10n.t("Operation cancelled"));
             return;

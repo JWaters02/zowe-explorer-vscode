@@ -48,6 +48,7 @@ import { SharedTreeProviders } from "../shared/SharedTreeProviders";
 import { DatasetTree } from "./DatasetTree";
 import { SettingsConfig } from "../../configuration/SettingsConfig";
 import { ZoweLocalStorage } from "../../tools/ZoweLocalStorage";
+import { DownloadOptionsView } from "../shared/DownloadOptionsView";
 
 type ClipboardItem = {
     profileName: string;
@@ -627,7 +628,10 @@ export class DatasetActions {
         }
     }
 
-    private static async getDataSetDownloadOptions(node: IZoweDatasetTreeNode): Promise<Definitions.DataSetDownloadOptions> {
+    private static async getDataSetDownloadOptions(
+        node: IZoweDatasetTreeNode,
+        context?: vscode.ExtensionContext
+    ): Promise<Definitions.DataSetDownloadOptions> {
         const dataSetDownloadOptions: Definitions.DataSetDownloadOptions =
             ZoweLocalStorage.getValue<Definitions.DataSetDownloadOptions>(Definitions.LocalStorageKey.DS_DOWNLOAD_OPTIONS) ?? {};
 
@@ -639,97 +643,91 @@ export class DatasetActions {
         dataSetDownloadOptions.selectedPath ??= LocalFileManagement.getDefaultUri();
 
         const profile = node.getProfile();
-        const getEncodingDescription = (): string => {
-            if (dataSetDownloadOptions.encoding) {
-                if (dataSetDownloadOptions.encoding.kind === "binary") {
-                    return vscode.l10n.t("Choose encoding for download (current: Binary)");
-                } else if (dataSetDownloadOptions.encoding.kind === "text") {
-                    return vscode.l10n.t("Choose encoding for download (current: EBCDIC)");
-                } else if (dataSetDownloadOptions.encoding.kind === "other") {
-                    return vscode.l10n.t("Choose encoding for download (current: {0})", dataSetDownloadOptions.encoding.codepage);
-                }
-            }
-            if (profile.profile?.encoding) {
-                return vscode.l10n.t("Choose encoding for download (current: {0})", profile.profile.encoding);
-            }
-            return vscode.l10n.t("Choose encoding for download (current: EBCDIC)");
-        };
-
-        const getExtensionDescription = (): string => {
-            if (dataSetDownloadOptions.fileExtension) {
-                return vscode.l10n.t("Override file extension (current: {0})", dataSetDownloadOptions.fileExtension);
-            }
-            return vscode.l10n.t("Override file extension");
-        };
-
-        const optionItems: vscode.QuickPickItem[] = [
+        const quickOptionItems: vscode.QuickPickItem[] = [
             {
                 label: vscode.l10n.t("Overwrite"),
                 description: vscode.l10n.t("Overwrite existing files"),
                 picked: dataSetDownloadOptions.overwrite,
             },
             {
-                label: vscode.l10n.t("Generate Directory Structure"),
-                description: vscode.l10n.t("Generates sub-folders based on the data set name"),
-                picked: dataSetDownloadOptions.generateDirectory,
-            },
-            {
-                label: vscode.l10n.t("Use Uppercase Names"),
-                description: vscode.l10n.t("Downloads files and directories using uppercase names. When disabled, names are converted to lowercase"),
-                picked: dataSetDownloadOptions.uppercaseNames,
-            },
-            {
                 label: vscode.l10n.t("Override File Extension"),
-                description: getExtensionDescription(),
+                description: vscode.l10n.t("Quickly change output file extension"),
                 picked: dataSetDownloadOptions.overrideExtension,
             },
             {
                 label: vscode.l10n.t("Choose Encoding"),
-                description: getEncodingDescription(),
+                description: vscode.l10n.t("Choose an encoding for this download"),
                 picked: dataSetDownloadOptions.chooseEncoding,
             },
         ];
 
-        const optionsQuickPick = Gui.createQuickPick();
-        optionsQuickPick.title = vscode.l10n.t("Download Options");
-        optionsQuickPick.placeholder = vscode.l10n.t("Select download options");
-        optionsQuickPick.ignoreFocusOut = true;
-        optionsQuickPick.canSelectMany = true;
-        optionsQuickPick.items = optionItems;
-        optionsQuickPick.selectedItems = optionItems.filter((item) => item.picked);
+        const quickOptionsQuickPick = Gui.createQuickPick();
+        quickOptionsQuickPick.title = vscode.l10n.t("Quick Download Tweaks");
+        quickOptionsQuickPick.placeholder = vscode.l10n.t("Select frequently changed options");
+        quickOptionsQuickPick.ignoreFocusOut = true;
+        quickOptionsQuickPick.canSelectMany = true;
+        quickOptionsQuickPick.items = quickOptionItems;
+        quickOptionsQuickPick.selectedItems = quickOptionItems.filter((item) => item.picked);
 
-        const selectedOptions: vscode.QuickPickItem[] = await new Promise((resolve) => {
+        const selectedQuickOptions: vscode.QuickPickItem[] = await new Promise((resolve) => {
             let wasAccepted = false;
 
-            optionsQuickPick.onDidAccept(() => {
+            quickOptionsQuickPick.onDidAccept(() => {
                 wasAccepted = true;
-                resolve(Array.from(optionsQuickPick.selectedItems));
-                optionsQuickPick.hide();
+                resolve(Array.from(quickOptionsQuickPick.selectedItems));
+                quickOptionsQuickPick.hide();
             });
 
-            optionsQuickPick.onDidHide(() => {
+            quickOptionsQuickPick.onDidHide(() => {
                 if (!wasAccepted) {
                     resolve(null);
                 }
             });
 
-            optionsQuickPick.show();
+            quickOptionsQuickPick.show();
         });
-        optionsQuickPick.dispose();
+        quickOptionsQuickPick.dispose();
 
-        // Do this instead of checking for length because unchecking all options is a valid choice
-        if (selectedOptions === null) {
+        if (selectedQuickOptions === null) {
             Gui.showMessage(DatasetActions.localizedStrings.opCancelled);
             return;
         }
 
-        const getOption = (label: string): boolean => selectedOptions.some((opt) => opt.label === vscode.l10n.t(label));
-        dataSetDownloadOptions.overwrite = getOption("Overwrite");
-        dataSetDownloadOptions.generateDirectory = getOption("Generate Directory Structure");
-        dataSetDownloadOptions.uppercaseNames = getOption("Use Uppercase Names");
-        dataSetDownloadOptions.chooseEncoding = getOption("Choose Encoding");
-        dataSetDownloadOptions.overrideExtension = getOption("Override Extension");
+        const isQuickOptionSelected = (label: string): boolean => selectedQuickOptions.some((opt) => opt.label === label);
+        dataSetDownloadOptions.overwrite = isQuickOptionSelected(vscode.l10n.t("Overwrite"));
+        dataSetDownloadOptions.chooseEncoding = isQuickOptionSelected(vscode.l10n.t("Choose Encoding"));
+        dataSetDownloadOptions.overrideExtension = isQuickOptionSelected(vscode.l10n.t("Override File Extension"));
 
+        const flowChoice = await Gui.showQuickPick([vscode.l10n.t("Continue download"), vscode.l10n.t("Open full options editor")], {
+            ignoreFocusOut: true,
+            canPickMany: false,
+            placeHolder: vscode.l10n.t("Continue with quick options or edit all saved settings"),
+        });
+
+        if (!flowChoice) {
+            Gui.showMessage(DatasetActions.localizedStrings.opCancelled);
+            return;
+        }
+
+        const openedWebview = flowChoice === vscode.l10n.t("Open full options editor");
+        if (openedWebview && context) {
+            const updatedOptions = await DownloadOptionsView.show(context, {
+                mode: "dataset",
+                options: dataSetDownloadOptions as Record<string, unknown>,
+            });
+
+            if (!updatedOptions) {
+                Gui.showMessage(DatasetActions.localizedStrings.opCancelled);
+                return;
+            }
+
+            Object.assign(dataSetDownloadOptions, updatedOptions as Definitions.DataSetDownloadOptions);
+            dataSetDownloadOptions.overwrite ??= true;
+            dataSetDownloadOptions.generateDirectory ??= true;
+            dataSetDownloadOptions.uppercaseNames ??= true;
+            dataSetDownloadOptions.chooseEncoding ??= false;
+            dataSetDownloadOptions.overrideExtension ??= false;
+        }
         if (dataSetDownloadOptions.chooseEncoding) {
             const encoding = await SharedUtils.promptForDownloadEncoding(profile, node.label as string);
             if (encoding === undefined) {
@@ -742,9 +740,13 @@ export class DatasetActions {
         }
 
         if (dataSetDownloadOptions.overrideExtension) {
+            const initialExtension =
+                typeof dataSetDownloadOptions.fileExtension === "string" && dataSetDownloadOptions.fileExtension.length > 0
+                    ? dataSetDownloadOptions.fileExtension
+                    : "";
             const extensionInput = await Gui.showInputBox({
                 placeHolder: vscode.l10n.t("Enter file extension (e.g. csv)"),
-                value: dataSetDownloadOptions.fileExtension || "",
+                value: initialExtension,
                 ignoreFocusOut: true,
                 validateInput: (text: string) => {
                     if (!text || text.trim().length === 0) {
@@ -763,6 +765,8 @@ export class DatasetActions {
             }
             const normalizedExtension = extensionInput.trim().startsWith(".") ? extensionInput.trim().slice(1) : extensionInput.trim();
             dataSetDownloadOptions.fileExtension = normalizedExtension;
+        } else {
+            dataSetDownloadOptions.fileExtension = undefined;
         }
 
         const dialogOptions: vscode.OpenDialogOptions = {
@@ -827,7 +831,7 @@ export class DatasetActions {
     /**
      * Downloads all the members of a PDS
      */
-    public static async downloadAllMembers(node: IZoweDatasetTreeNode): Promise<void> {
+    public static async downloadAllMembers(node: IZoweDatasetTreeNode, context?: vscode.ExtensionContext): Promise<void> {
         ZoweLogger.trace("dataset.actions.downloadDataset called.");
 
         const profile = node.getProfile();
@@ -864,7 +868,7 @@ export class DatasetActions {
             }
         }
 
-        const dataSetDownloadOptions = await DatasetActions.getDataSetDownloadOptions(node);
+        const dataSetDownloadOptions = await DatasetActions.getDataSetDownloadOptions(node, context);
         if (!dataSetDownloadOptions) {
             return;
         }
@@ -924,7 +928,7 @@ export class DatasetActions {
     /**
      * Downloads a member
      */
-    public static async downloadMember(node: IZoweDatasetTreeNode): Promise<void> {
+    public static async downloadMember(node: IZoweDatasetTreeNode, context?: vscode.ExtensionContext): Promise<void> {
         ZoweLogger.trace("dataset.actions.downloadMember called.");
 
         const profile = node.getProfile();
@@ -934,7 +938,7 @@ export class DatasetActions {
             return;
         }
 
-        const dataSetDownloadOptions = await DatasetActions.getDataSetDownloadOptions(node);
+        const dataSetDownloadOptions = await DatasetActions.getDataSetDownloadOptions(node, context);
         if (!dataSetDownloadOptions) {
             return;
         }
@@ -983,7 +987,7 @@ export class DatasetActions {
     /**
      * Downloads a sequential data set
      */
-    public static async downloadDataSet(node: IZoweDatasetTreeNode): Promise<void> {
+    public static async downloadDataSet(node: IZoweDatasetTreeNode, context?: vscode.ExtensionContext): Promise<void> {
         ZoweLogger.trace("dataset.actions.downloadDataSet called.");
 
         const profile = node.getProfile();
@@ -998,7 +1002,7 @@ export class DatasetActions {
             return;
         }
 
-        const dataSetDownloadOptions = await DatasetActions.getDataSetDownloadOptions(node);
+        const dataSetDownloadOptions = await DatasetActions.getDataSetDownloadOptions(node, context);
         if (!dataSetDownloadOptions) {
             return;
         }
