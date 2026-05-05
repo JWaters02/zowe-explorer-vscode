@@ -29,7 +29,13 @@ Now the right click option on partitioned data sets and profile to filter data s
 
 Note that the filter only applies on the client side, so if pagination is enabled and active, each individual page is filtered and it may still require clicking through pages to get to the one with the filtered data sets or members.
 
-### Favorite individual PDS members
+### Favorites changes
+
+#### Favorite VSAM data sets
+
+VSAM data sets can now be favorited.
+
+#### Favorite individual PDS members
 
 The favorites tree finally supports being able to favorite individual members of a partitioned data set.
 
@@ -110,6 +116,7 @@ Release notes for Zowe Explorer are now available in VS Code. Release notes are 
 Data sets can now be viewed in a table format, similar to the jobs table. The data sets table allows for easier filtering, sorting, and bulk actions on data sets and members.
 
 - **Open the table:**
+
   - Right-click a filtered data sets profile, a data set, or a favorite, and select **Show as Table**.
   - Open the **Command Palette** and search for `Zowe Explorer: List Data Sets`, select a profile, and enter a search filter.
 
@@ -219,6 +226,7 @@ The jobs table is a panel that allows viewing filtered jobs more clearly and for
 Data sets can now be searched for a string, similar to ISPF's `SRCHFOR`.
 
 - **Search options:**
+
   - Right-click a profile: **Search filtered data sets**
   - Right-click a PDS: **Search PDS members**
   - Also available for a PDS in the Favorites tree
