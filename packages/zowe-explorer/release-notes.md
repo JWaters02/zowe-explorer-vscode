@@ -7,19 +7,19 @@
 When submitting a job, there are now two buttons on the job submission notification popup:
 
 - **Open Job:** This filters the job tree by the job ID to allow direct access to the job in one click. It behaves the same way as clicking the link on the popup but also closes the popup on the same click.
-- **Poll For Job Completion:** This button automatically starts polling for the job to complete. When it completes, there will be a new notification popup with the return code and the same open job button to filter the job in the job tree. The poll interval is `5000 ms` by default (i.e. checking for completion every 5 seconds) but this interval can be changed in the setting `Zowe Explorer > Jobs: Poll Interval`.
+- **Poll For Job Completion:** This button automatically starts polling for the job to complete. When it completes, there will be a new notification popup with the return code and the same open job button to filter the job in the job tree. The poll interval is `5000 ms` by default (i.e. checking for completion every 5 seconds) but this interval can be changed in the setting **Zowe > Jobs: Poll Interval**.
 
 ![3.5-job-submission](./resources/release-notes/3.5-job-submission.png)
 
 ![3.5-job-completion](./resources/release-notes/3.5-job-completion.png)
 
-### Download data sets and USS files to local filesystem
+### Download data sets and USS files to the local filesystem
 
 Zowe Explorer now supports being able to directly download data sets, data set members, USS files & USS directories to the local machine filesystem - with a multitude of basic and advanced options built into the download menus.
 
 **Right click** on sequential data sets, partitioned data sets (to download all members), partitioned data set members, USS files, or USS directories and click on the respective `Download ...` option to select download options.
 
-Please see the docs for much more detail on [downloading data sets](https://docs.zowe.org/stable/user-guide/ze-working-with-data-sets/#downloading-a-data-set-to-a-local-file), downloading [USS files](https://docs.zowe.org/stable/user-guide/ze-working-with-uss-files#downloading-a-uss-file-to-a-local-file) or [USS directories](https://docs.zowe.org/stable/user-guide/ze-working-with-uss-files#downloading-a-uss-directory-to-a-local-directory).
+Please see the docs for much more detail on [downloading data sets](https://docs.zowe.org/stable/user-guide/ze-working-with-data-sets#downloading-a-data-set-to-a-local-file), downloading [USS files](https://docs.zowe.org/stable/user-guide/ze-working-with-uss-files#downloading-a-uss-file-to-a-local-file) or [USS directories](https://docs.zowe.org/stable/user-guide/ze-working-with-uss-files#downloading-a-uss-directory-to-a-local-directory).
 
 Note: as this is a brand new feature, only the `z/OSMF` profile type supports this functionality upon release. Expect other profile types to add their backend support over time.
 
@@ -53,7 +53,7 @@ Data set search is now even smarter because it supports comma-seperated member n
 
 ### Setting to hide hidden USS files
 
-Currently, hidden Unix files (those starting with a `.`) are always listed in the USS tree. There is now a setting `Zowe Explorer > Files: Show Hidden Files` that can be disabled to hide these files.
+Currently, hidden Unix files (those starting with a `.`) are always listed in the USS tree. There is now a setting **Zowe > Files: Show Hidden Files** that can be disabled to hide these files.
 
 ### Localization for release notes and changelogs
 
