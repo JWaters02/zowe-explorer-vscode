@@ -21,7 +21,7 @@ Zowe Explorer now supports being able to directly download data sets, data set m
 
 Please see the docs for much more detail on [downloading data sets](https://docs.zowe.org/stable/user-guide/ze-working-with-data-sets#downloading-a-data-set-to-a-local-file), downloading [USS files](https://docs.zowe.org/stable/user-guide/ze-working-with-uss-files#downloading-a-uss-file-to-a-local-file) or [USS directories](https://docs.zowe.org/stable/user-guide/ze-working-with-uss-files#downloading-a-uss-directory-to-a-local-directory).
 
-Note: as this is a brand new feature, only the `z/OSMF` profile type supports this functionality upon release. Expect other profile types to add their backend support over time.
+Note as this is a brand new feature, only the `z/OSMF` profile type supports this functionality upon release. Expect other profile types to add their backend support over time.
 
 ### Filter data sets by name or by date created
 
@@ -47,7 +47,7 @@ Several members may be favorited or unfavorited at once by doing a multi-selecti
 
 ![3.5-favorites](./resources/release-notes/3.5-favorites.png)
 
-Note: when only a partial selection of PDS members are favorited, data set pagination is disabled on the PDS in the favorites tree.
+Note that when only a partial selection of PDS members are favorited, data set pagination is disabled on the PDS in the favorites tree.
 
 ### Accessibility improvements
 
