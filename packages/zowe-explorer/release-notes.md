@@ -25,7 +25,7 @@ Note as this is a brand new feature, only the `z/OSMF` profile type supports thi
 
 ### Filter data sets by name or by date created
 
-Now the right click option on partitioned data sets and profile to filter data sets/data set members supports filtering by name or by date created. The filter by name supports wildcards and comma-seperated names in the same way as the data set search.
+Now the right click option on partitioned data sets and profile to filter data sets/data set members supports filtering by name or by date created. The filter by name supports wildcards and comma-separated names in the same way as the data set search.
 
 Note that the filter only applies on the client side, so if pagination is enabled and active, each individual page is filtered and it may still require clicking through pages to get to the one with the filtered data sets or members.
 
@@ -37,7 +37,7 @@ VSAM data sets can now be favorited.
 
 #### Favorite individual PDS members
 
-The favorites tree finally supports being able to favorite individual members of a partitioned data set.
+The favorites tree now supports being able to favorite individual members of a partitioned data set.
 
 When favoriting a data set member, the partitioned data set will still show in the favorites tree, but now only with the favorited data set member under it, rather than all members as before. When expanded, a tooltip will now show beside the data set name with the number of members that are favorited inside of it vs the total number of members the data set has.
 
@@ -55,7 +55,7 @@ Many issues have been addressed to allow screen readers to better navigate and u
 
 ### Smarter data set search filtering
 
-Data set search is now even smarter because it supports comma-seperated member names within a partitioned data set. For example, `MY.PDS(MEM1,TEST*)` will return `MY.PDS` with the member called `MEM1` and any members beginning with `TEST`.
+Data set search is now even smarter because it supports comma-separated member names within a partitioned data set. For example, `MY.PDS(MEM1,TEST*)` will return `MY.PDS` with the member called `MEM1` and any members beginning with `TEST`.
 
 ### Setting to hide hidden USS files
 
