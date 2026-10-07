@@ -44,6 +44,7 @@ import { ZoweLogger } from "../../tools/ZoweLogger";
 import { TreeViewUtils } from "../../utils/TreeViewUtils";
 import { SharedContext } from "../shared/SharedContext";
 import { SharedUtils } from "../shared/SharedUtils";
+import { NodeColors } from "../shared/NodeColors";
 import { FilterDescriptor, FilterItem } from "../../management/FilterManagement";
 import { IconUtils } from "../../icons/IconUtils";
 import { AuthUtils } from "../../utils/AuthUtils";
@@ -1428,6 +1429,9 @@ Would you like to do this now?`,
                     if (profileNodeInFavorites.children.length < 1) {
                         await this.removeFavProfile(profileName, false);
                     }
+                    // A saved search has no session-tree twin, so its color is now unreachable
+                    NodeColors.clearEntry(NodeColors.treeKeyFor(node), profileName, sessionPattern, Constants.DS_SESSION_CONTEXT);
+                    await NodeColors.flush();
                     this.updateFavorites();
                     this.refreshElement(this.mFavoriteSession);
                     this.updateSessionFilterFavContext(profileName);
@@ -1528,6 +1532,11 @@ Would you like to do this now?`,
         if (profileNodeInFavorites.children.length < 1) {
             await this.removeFavProfile(profileName, false);
         }
+        if (wasSession) {
+            // A saved search has no session-tree twin, so its color is now unreachable
+            NodeColors.clearEntry(NodeColors.treeKeyFor(node), profileName, removedNodeLabel, Constants.DS_SESSION_CONTEXT);
+            await NodeColors.flush();
+        }
         this.updateFavorites();
         this.refreshElement(this.mFavoriteSession);
         if (wasPds) {
@@ -1562,21 +1571,17 @@ Would you like to do this now?`,
                 if (SharedContext.isFavoritePds(favorite) && pdsNode.pdsFavoriteState === Definitions.PdsFavoriteState.SpecificMembers) {
                     // Store each favorited member as a separate persistence entry
                     for (const member of pdsNode.favoritedMemberNames) {
-                        const favoriteEntry =
-                            "[" +
-                            profileNode.label.toString() +
-                            "]: " +
-                            favorite.label.toString() +
-                            "(" +
-                            member +
-                            "){" +
-                            SharedContext.getBaseContext(favorite) +
-                            "}";
+                        const favoriteEntry = SharedUtils.favoriteEntry(
+                            profileNode.label.toString(),
+                            favorite.label.toString(),
+                            SharedContext.getBaseContext(favorite),
+                            member
+                        );
                         memberFavoritesArray.push(favoriteEntry);
                     }
                 } else {
                     const baseContext = SharedContext.getBaseContext(favorite);
-                    const favoriteEntry = "[" + profileNode.label.toString() + "]: " + favorite.label.toString() + "{" + baseContext + "}";
+                    const favoriteEntry = SharedUtils.favoriteEntry(profileNode.label.toString(), favorite.label.toString(), baseContext);
                     if (favorite.contextValue?.includes(Constants.VSAM_CONTEXT)) {
                         vsamFavoritesArray.push(favoriteEntry);
                     } else if (SharedContext.isMigrated(favorite)) {

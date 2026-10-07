@@ -21,6 +21,7 @@ import { DatasetInit } from "./trees/dataset/DatasetInit";
 import { JobInit } from "./trees/job/JobInit";
 import { SharedInit } from "./trees/shared/SharedInit";
 import { SharedTreeProviders } from "./trees/shared/SharedTreeProviders";
+import { NodeColors } from "./trees/shared/NodeColors";
 import { USSInit } from "./trees/uss/USSInit";
 import { ProfilesUtils } from "./utils/ProfilesUtils";
 import { TableViewUtils } from "./utils/TableViewUtils";
@@ -35,6 +36,7 @@ import { FeatureFlags } from "@zowe/zowe-explorer-api";
  */
 export async function activate(context: vscode.ExtensionContext): Promise<ZoweExplorerApiRegister> {
     ZoweLocalStorage.initializeZoweLocalStorage(context.globalState, context.workspaceState);
+    NodeColors.initialize();
     await SharedInit.initZoweLogger(context);
 
     await FeatureFlags.init();

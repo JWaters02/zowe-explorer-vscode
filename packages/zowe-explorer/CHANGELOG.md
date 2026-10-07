@@ -15,6 +15,7 @@ All notable changes to the "vscode-extension-for-zowe" extension will be documen
 - Replaced repetitive `if (err instanceof Error)` patterns with `handleError` and `errorMessage` utility functions from `@zowe/zowe-explorer-api`. [#4207](https://github.com/zowe/zowe-explorer-vscode/issues/4207)
 - Added new VS Code toggle setting for enabling various features within Zowe Explorer. [#4242](https://github.com/zowe/zowe-explorer-vscode/issues/4242)
 - Added support for comma-separated job prefixes in the **JOBS** tree filter, matching existing data set filter behavior. [#4395](https://github.com/zowe/zowe-explorer-vscode/issues/4395)
+- Added a "Set Color..." command to the Data Sets tree, so that data sets, PDS and favorited searches - especially favorites - can be color coded into categories. [#4453](https://github.com/zowe/zowe-explorer-vscode/issues/4453)
 
 ### Bug fixes
 

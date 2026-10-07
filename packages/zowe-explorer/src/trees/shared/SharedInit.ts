@@ -395,6 +395,11 @@ export class SharedInit {
                     }
                 })
             );
+            context.subscriptions.push(
+                vscode.commands.registerCommand("zowe.setNodeColor", async (node: IZoweTreeNode, nodeList: IZoweTreeNode[]) => {
+                    await SharedActions.setNodeColor(node, nodeList);
+                })
+            );
             context.subscriptions.push(vscode.commands.registerCommand("zowe.addToWorkspace", SharedUtils.addToWorkspace));
             context.subscriptions.push(
                 vscode.commands.registerCommand("zowe.removeFavProfile", (node: IZoweTreeNode) =>

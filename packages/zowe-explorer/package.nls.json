@@ -24,6 +24,7 @@
   "addFavorite": "Add to Favorites",
   "addToWorkspace": "Add to Workspace",
   "removeFavProfile": "Remove Profile from Favorites",
+  "setNodeColor": "Set Color...",
   "addSession": "Add Profile to Data Sets View",
   "createDataset": "Create New Data Set",
   "createMember": "Create New Member",

@@ -7,6 +7,7 @@
   "#### Submit job with encoding": "#### Submit job with encoding",
   "#### VSAM support updates": "#### VSAM support updates",
   "#### Windows custom persistence levels": "#### Windows custom persistence levels",
+  "$(circle-slash) No color": "$(circle-slash) No color",
   "$(plus) Create a new Unix command": "$(plus) Create a new Unix command",
   "'{0}' not found in directory '{1}'/Item nameDirectory path": {
     "message": "'{0}' not found in directory '{1}'",
@@ -15,6 +16,7 @@
       "Directory path"
     ]
   },
+  "(current)": "(current)",
   "(default)": "(default)",
   "**BREAKING** Moved data set templates out of data set history settings into new setting \"zowe.ds.templates\". <a>#2345</a>": "**BREAKING** Moved data set templates out of data set history settings into new setting \"zowe.ds.templates\". <a>#2345</a>",
   "**Behavior:** Each command opens a dedicated terminal panel (for example, only MVS commands in the MVS terminal).": "**Behavior:** Each command opens a dedicated terminal panel (for example, only MVS commands in the MVS terminal).",
@@ -82,6 +84,7 @@
   "Added \"Filter Jobs\" feature in Jobs tree view: accessible via filter icon or right-clicking on session node. <a>#2599</a>": "Added \"Filter Jobs\" feature in Jobs tree view: accessible via filter icon or right-clicking on session node. <a>#2599</a>",
   "Added \"Filter PDS members\" feature in Data Sets tree view: accessible via filter icon on session node, or by right-clicking a PDS or session. <a>#2420</a>": "Added \"Filter PDS members\" feature in Data Sets tree view: accessible via filter icon on session node, or by right-clicking a PDS or session. <a>#2420</a>",
   "Added \"Open with Encoding\" feature to open data sets and USS files in a non-standard codepage. <a>#2435</a>": "Added \"Open with Encoding\" feature to open data sets and USS files in a non-standard codepage. <a>#2435</a>",
+  "Added \"Set Color...\" and \"Clear Color\" commands to the Data Sets tree, so that data sets and saved searches - especially favorites - can be color coded into categories. <a>#4453</a>": "Added \"Set Color...\" and \"Clear Color\" commands to the Data Sets tree, so that data sets and saved searches - especially favorites - can be color coded into categories. <a>#4453</a>",
   "Added \"Show as Table\" option for partitioned data sets. Users can now right-click on a partitioned data set in the Data Sets tree and select \"Show as Table\" to view its members in a tabular format. <a>#3583</a>": "Added \"Show as Table\" option for partitioned data sets. Users can now right-click on a partitioned data set in the Data Sets tree and select \"Show as Table\" to view its members in a tabular format. <a>#3583</a>",
   "Added \"Show as Table\" option for profiles with search patterns in the Data Sets tree. Users can now right-click on a profile in the Data Sets tree with a search pattern set and select \"Show as Table\" to view matching data sets in a tabular format. <a>#3583</a>": "Added \"Show as Table\" option for profiles with search patterns in the Data Sets tree. Users can now right-click on a profile in the Data Sets tree with a search pattern set and select \"Show as Table\" to view matching data sets in a tabular format. <a>#3583</a>",
   "Added \"Sort PDS members\" feature in Data Sets tree view: accessible via sort icon on session node, or by right-clicking a PDS or session. <a>#2420</a>": "Added \"Sort PDS members\" feature in Data Sets tree view: accessible via sort icon on session node, or by right-clicking a PDS or session. <a>#2420</a>",
@@ -273,6 +276,7 @@
   "Back": "Back",
   "Basic Authentication": "Basic Authentication",
   "Binary": "Binary",
+  "Blue": "Blue",
   "Breaking: Removed the setting zowe.zowex.serverAutoUpdate, which was a global setting used to control whether the backend SSH server zowex would be automatically updated when it was outdated. To prevent such updates going forward, specify \"autoUpdate\": false in each desired ssh profile. <a>#4436</a>": "Breaking: Removed the setting zowe.zowex.serverAutoUpdate, which was a global setting used to control whether the backend SSH server zowex would be automatically updated when it was outdated. To prevent such updates going forward, specify \"autoUpdate\": false in each desired ssh profile. <a>#4436</a>",
   "Browse": "Browse",
   "Browse for Export Folder...": "Browse for Export Folder...",
@@ -360,6 +364,12 @@
   "Clear filter for profile": "Clear filter for profile",
   "Click on Edit in settings.json to enter in desired values in the file. Specify the method and direction from the options provided by IntelliSense. For example:": "Click on Edit in settings.json to enter in desired values in the file. Specify the method and direction from the options provided by IntelliSense. For example:",
   "Click on a filter to change its value": "Click on a filter to change its value",
+  "Color: {0}/Color name": {
+    "message": "Color: {0}",
+    "comment": [
+      "Color name"
+    ]
+  },
   "Column settings": "Column settings",
   "Command response: {0}/Command response": {
     "message": "Command response: {0}",
@@ -1250,6 +1260,8 @@
   "Global: in the Zowe home directory": "Global: in the Zowe home directory",
   "Go back": "Go back",
   "Go to Local Filtering": "Go to Local Filtering",
+  "Gray": "Gray",
+  "Green": "Green",
   "Group": "Group",
   "Grouped Common methods into Singleton classes. <a>#2109</a>": "Grouped Common methods into Singleton classes. <a>#2109</a>",
   "HLQ.**.DATASET or HLQ.DATASET.NAME": "HLQ.**.DATASET or HLQ.DATASET.NAME",
@@ -1469,6 +1481,7 @@
     ]
   },
   "MVS data set enhancements": "MVS data set enhancements",
+  "Magenta": "Magenta",
   "Manage Persistent Properties": "Manage Persistent Properties",
   "Many issues have been addressed to allow screen readers to better navigate and use Zowe Explorer features.": "Many issues have been addressed to allow screen readers to better navigate and use Zowe Explorer features.",
   "Member '{0}' not found in PDS '{1}'/Member namePDS name": {
@@ -1623,6 +1636,7 @@
   "Optimized fetching and caching of child nodes across the primary tree views (Data Sets, Unix System Services, Jobs). <a>#2347</a>": "Optimized fetching and caching of child nodes across the primary tree views (Data Sets, Unix System Services, Jobs). <a>#2347</a>",
   "Optimized the refresh functionality in Zowe Explorer for performance and stability. Now, the profiles are refreshed once before refreshing all the tree providers. <a>#3524</a>": "Optimized the refresh functionality in Zowe Explorer for performance and stability. Now, the profiles are refreshed once before refreshing all the tree providers. <a>#3524</a>",
   "Options": "Options",
+  "Orange": "Orange",
   "Other": "Other",
   "Other user Jobs": "Other user Jobs",
   "Override File Extension": "Override File Extension",
@@ -1794,6 +1808,7 @@
   "Prompting the user to choose a recent member for editing": "Prompting the user to choose a recent member for editing",
   "Provide users with the option to upload binary files by implementing a \"Upload Files (Binary)\" right-click option in the USS tree. <a>#1956</a>": "Provide users with the option to upload binary files by implementing a \"Upload Files (Binary)\" right-click option in the USS tree. <a>#1956</a>",
   "Pulling from Mainframe...": "Pulling from Mainframe...",
+  "Purple": "Purple",
   "Raw data representation": "Raw data representation",
   "Re-implemented regular dataset API call if the dataSetsMatching does not exist. <a>#2084</a>": "Re-implemented regular dataset API call if the dataSetsMatching does not exist. <a>#2084</a>",
   "Read": "Read",
@@ -1816,6 +1831,7 @@
   "Recent Searches": "Recent Searches",
   "Record Format": "Record Format",
   "Record Length": "Record Length",
+  "Red": "Red",
   "Redact boolean values": "Redact boolean values",
   "Redact number values": "Redact number values",
   "Redact profile names": "Redact profile names",
@@ -1952,6 +1968,7 @@
     ]
   },
   "Select a certificate and certificate key in PEM format:": "Select a certificate and certificate key in PEM format:",
+  "Select a color for the selected node(s)": "Select a color for the selected node(s)",
   "Select a console command to run against {0} (An option to edit will follow)/Host name": {
     "message": "Select a console command to run against {0} (An option to edit will follow)",
     "comment": [
@@ -2358,6 +2375,7 @@
   "When the user types in a USS file path in the input box of the filter selection prompt, the \"Create a new filter\" option now updates to include the file path. Once clicked, the new filter is added to the user's search history and the path is used for listing a USS directory. <a>#3015</a>": "When the user types in a USS file path in the input box of the filter selection prompt, the \"Create a new filter\" option now updates to include the file path. Once clicked, the new filter is added to the user's search history and the path is used for listing a USS directory. <a>#3015</a>",
   "When the user types in a data set pattern in the input box of the filter selection prompt, the \"Create a new filter\" option now updates to include the pattern. Once clicked, the new filter is added to the user's search history and the pattern is used for listing data sets. <a>#3015</a>": "When the user types in a data set pattern in the input box of the filter selection prompt, the \"Create a new filter\" option now updates to include the pattern. Once clicked, the new filter is added to the user's search history and the pattern is used for listing data sets. <a>#3015</a>",
   "Write": "Write",
+  "Yellow": "Yellow",
   "Yes": "Yes",
   "You are already at the root directory.": "You are already at the root directory.",
   "You can find the latest updates and features here.": "You can find the latest updates and features here.",

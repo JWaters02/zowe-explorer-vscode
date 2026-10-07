@@ -450,6 +450,11 @@
         "category": "Zowe Explorer"
       },
       {
+        "command": "zowe.setNodeColor",
+        "title": "%setNodeColor%",
+        "category": "Zowe Explorer"
+      },
+      {
         "command": "zowe.saveSearch",
         "title": "%saveSearch%",
         "category": "Zowe Explorer"
@@ -1260,6 +1265,11 @@
           "group": "003_zowe_dsWorkspace@4"
         },
         {
+          "when": "view == zowe.ds.explorer && viewItem =~ /^(pds|ds|session.*_fav)/",
+          "command": "zowe.setNodeColor",
+          "group": "003_zowe_dsWorkspace@5"
+        },
+        {
           "when": "view == zowe.ds.explorer && viewItem =~ /^(pds|ds|migr|member|vsam).*/ && !listMultiSelection",
           "command": "zowe.ds.copyName",
           "group": "098_zowe_dsMisc@0"
@@ -1642,6 +1652,10 @@
         },
         {
           "command": "zowe.removeFavProfile",
+          "when": "never"
+        },
+        {
+          "command": "zowe.setNodeColor",
           "when": "never"
         },
         {

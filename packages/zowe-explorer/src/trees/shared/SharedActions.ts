@@ -26,6 +26,8 @@ import { SharedTreeProviders } from "./SharedTreeProviders";
 import { ZoweExplorerExtender } from "../../extending/ZoweExplorerExtender";
 import type { ZoweTreeProvider } from "../ZoweTreeProvider";
 import { ProfilesUtils } from "../../utils/ProfilesUtils";
+import { NodeColors } from "./NodeColors";
+import { IconGenerator } from "../../icons/IconGenerator";
 
 export class SharedActions {
     private static refreshInProgress = false;
@@ -294,6 +296,48 @@ export class SharedActions {
             }
         });
         await Promise.all(updatePromises);
+    }
+
+    public static async setNodeColor(node: IZoweTreeNode, nodeList: IZoweTreeNode[]): Promise<void> {
+        ZoweLogger.trace("SharedActions.setNodeColor called.");
+        const selectedNodes = SharedUtils.getSelectedNodeList(node, nodeList);
+        if (selectedNodes.length === 0) {
+            return;
+        }
+
+        const currentColorKey = NodeColors.get(selectedNodes[0]);
+        const items: (vscode.QuickPickItem & { colorKey?: string })[] = NodeColors.getPalette().map((color) => ({
+            label: color.displayName,
+            description: color.key === currentColorKey ? vscode.l10n.t("(current)") : undefined,
+            colorKey: color.key,
+        }));
+        items.push({ label: "", kind: vscode.QuickPickItemKind.Separator }, { label: vscode.l10n.t("No color") });
+
+        const choice = await Gui.showQuickPick(items, {
+            placeHolder: vscode.l10n.t("Select a color for the selected node(s)"),
+        });
+        if (choice == null) {
+            return;
+        }
+
+        for (const item of selectedNodes) {
+            if (choice.colorKey != null) {
+                NodeColors.set(item, choice.colorKey);
+                NodeColors.applyTo(item);
+            } else {
+                NodeColors.clear(item);
+                NodeColors.restoreTooltip(item);
+                const icon = IconGenerator.getIconByNode(item);
+                if (icon) {
+                    item.iconPath = icon.path;
+                }
+            }
+        }
+        await NodeColors.flush();
+
+        for (const item of selectedNodes) {
+            SharedTreeProviders.getProviderForNode(item)?.nodeDataChanged?.(item);
+        }
     }
 
     public static async refreshProvider(treeProvider: IZoweTree<IZoweTreeNode>, refreshProfiles?: boolean): Promise<void> {

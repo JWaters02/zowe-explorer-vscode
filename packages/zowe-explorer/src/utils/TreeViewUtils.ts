@@ -18,6 +18,7 @@ import { ZoweLogger } from "../tools/ZoweLogger";
 import { Profiles } from "../configuration/Profiles";
 import { SharedUtils } from "../trees/shared/SharedUtils";
 import { SharedContext } from "../trees/shared/SharedContext";
+import { NodeColors } from "../trees/shared/NodeColors";
 import { IconUtils } from "../icons/IconUtils";
 
 export class TreeViewUtils {
@@ -120,6 +121,8 @@ export class TreeViewUtils {
         setting.sessions = sess;
         setting.favorites = fave;
         ZoweLocalStorage.setValue(treeType, setting);
+        NodeColors.pruneProfile(NodeColors.treeKeyForSchema(treeType), profileName);
+        await NodeColors.flush();
     }
 
     public static async addDefaultSession(treeProvider: IZoweTree<IZoweTreeNode>, profileType: string): Promise<void> {

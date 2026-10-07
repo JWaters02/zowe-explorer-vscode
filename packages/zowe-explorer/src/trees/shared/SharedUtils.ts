@@ -178,6 +178,11 @@ export class SharedUtils {
         return cachedEncoding?.kind === "other" ? cachedEncoding.codepage : cachedEncoding?.kind;
     }
 
+    public static favoriteEntry(profileName: string, label: string, baseContext: string, memberName?: string): string {
+        const favoriteLabel = memberName != null ? `${label}(${memberName})` : label;
+        return `[${profileName}]: ${favoriteLabel}{${baseContext}}`;
+    }
+
     public static parseFavorites(lines: string[]): Definitions.FavoriteData[] {
         const invalidFavoriteWarning = (line: string): void =>
             ZoweLogger.warn(

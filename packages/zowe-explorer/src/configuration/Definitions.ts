@@ -79,6 +79,10 @@ export namespace Definitions {
         label: string;
         contextValue?: string;
     };
+    /**
+     * Maps a canonical node key (`<tree>|[profile]: label{context}`) to a contributed color ID.
+     */
+    export type NodeColorAssignments = Record<string, string>;
     export type ProviderFunctions = {
         ds: () => Promise<Types.IZoweDatasetTreeType>;
         uss: () => Promise<Types.IZoweUSSTreeType>;
@@ -207,5 +211,6 @@ export namespace Definitions {
         DISPLAY_RELEASE_NOTES_VERSION = "zowe.displayReleaseNotes",
         DS_DOWNLOAD_OPTIONS = "zowe.dsDownloadOptions",
         USS_DOWNLOAD_OPTIONS = "zowe.ussDownloadOptions",
+        NODE_COLORS = "zowe.nodeColors",
     }
 }

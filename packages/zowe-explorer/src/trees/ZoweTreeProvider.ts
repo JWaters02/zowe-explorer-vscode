@@ -20,6 +20,7 @@ import { IconGenerator } from "../icons/IconGenerator";
 import { SettingsConfig } from "../configuration/SettingsConfig";
 import { SharedTreeProviders } from "./shared/SharedTreeProviders";
 import { SharedActions } from "./shared/SharedActions";
+import { NodeColors } from "./shared/NodeColors";
 import { IconUtils } from "../icons/IconUtils";
 import { AuthUtils } from "../utils/AuthUtils";
 import { TreeViewUtils } from "../utils/TreeViewUtils";
@@ -49,6 +50,7 @@ export class ZoweTreeProvider<T extends IZoweTreeNode> {
      */
     public getTreeItem(element: IZoweTreeNode): vscode.TreeItem | Thenable<vscode.TreeItem> {
         ZoweLogger.trace("ZoweTreeProvider.getTreeItem called.");
+        NodeColors.applyTo(element);
         return element;
     }
 
