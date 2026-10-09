@@ -166,6 +166,11 @@ export namespace Definitions {
         placeHolder: string;
         validateInput?: vscode.InputBoxOptions["validateInput"];
     }
+    export interface ReadOnlyRule {
+        profile?: string; // Mark whole profile read-only
+        pattern?: string; // Data set pattern
+        uss?: string; // USS path glob
+    }
     export enum Trees {
         USS,
         MVS,

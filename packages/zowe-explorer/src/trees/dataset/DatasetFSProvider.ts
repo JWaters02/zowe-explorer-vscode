@@ -41,6 +41,7 @@ import { IZosFilesResponse, IZosmfListResponse } from "@zowe/zos-files-for-zowe-
 import { Profiles } from "../../configuration/Profiles";
 import { ZoweExplorerApiRegister } from "../../extending/ZoweExplorerApiRegister";
 import { ZoweLogger } from "../../tools/ZoweLogger";
+import { ReadOnlyManagement } from "../../management/ReadOnlyManagement";
 import dayjs from "dayjs";
 import { DatasetUtils } from "./DatasetUtils";
 import { AuthUtils } from "../../utils/AuthUtils";
@@ -255,7 +256,7 @@ export class DatasetFSProvider extends BaseProvider implements vscode.FileSystem
                     if (queryParams.has("conflict")) {
                         return { ...memberStat, permissions: vscode.FilePermission.Readonly };
                     }
-                    return FsAbstractUtils.applyReadOnlyPermission(uri, memberStat);
+                    return ReadOnlyManagement.applyPermission(uri, memberStat);
                 }
             }
             throw vscode.FileSystemError.FileNotFound(uri);
@@ -266,7 +267,7 @@ export class DatasetFSProvider extends BaseProvider implements vscode.FileSystem
             checkLocal: () => !isVisibleEditor && !!this.lookup(uri, true),
             execute: () => this.statImplementation(uri),
         });
-        return FsAbstractUtils.applyReadOnlyPermission(uri, stat);
+        return ReadOnlyManagement.applyPermission(uri, stat);
     }
 
     private async fetchEntriesForProfile(uri: vscode.Uri, uriInfo: UriFsInfo, pattern: string): Promise<FilterEntry> {

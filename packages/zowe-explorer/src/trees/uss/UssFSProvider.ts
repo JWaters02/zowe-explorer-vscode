@@ -34,6 +34,7 @@ import { USSFileStructure } from "./USSFileStructure";
 import { Profiles } from "../../configuration/Profiles";
 import { ZoweExplorerApiRegister } from "../../extending/ZoweExplorerApiRegister";
 import { ZoweLogger } from "../../tools/ZoweLogger";
+import { ReadOnlyManagement } from "../../management/ReadOnlyManagement";
 import { AuthUtils } from "../../utils/AuthUtils";
 import { ProfilesUtils } from "../../utils/ProfilesUtils";
 import dayjs = require("dayjs");
@@ -229,7 +230,7 @@ export class UssFSProvider extends BaseProvider implements vscode.FileSystemProv
         const entry = result as UssDirectory | UssFile;
 
         if (!entry || !entry.metadata || !entry.metadata.path) {
-            return FsAbstractUtils.applyReadOnlyPermission(uri, result);
+            return ReadOnlyManagement.applyPermission(uri, result);
         }
 
         const uriInfo = this._getInfoFromUri(uri);
@@ -237,10 +238,10 @@ export class UssFSProvider extends BaseProvider implements vscode.FileSystemProv
         const entryPath = entry.metadata.path.replace(/\/+/g, "/");
         const reqPath = uriInfo.path.replace(/\/+/g, "/");
         if (entryPath !== reqPath) {
-            return FsAbstractUtils.applyReadOnlyPermission(uri, this.lookup(uri, false));
+            return ReadOnlyManagement.applyPermission(uri, this.lookup(uri, false));
         }
 
-        return FsAbstractUtils.applyReadOnlyPermission(uri, result);
+        return ReadOnlyManagement.applyPermission(uri, result);
     }
 
     /**
