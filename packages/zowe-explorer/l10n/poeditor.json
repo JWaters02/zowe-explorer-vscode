@@ -578,6 +578,24 @@
   "openWithEncoding": {
     "Open with Encoding": ""
   },
+  "readOnly.makeReadOnly": {
+    "Make Read-Only": ""
+  },
+  "readOnly.makeReadWrite": {
+    "Make Writable": ""
+  },
+  "zowe.readOnly.rules": {
+    "Rules for opening data sets and z/OS Unix files in read-only mode. Each rule can have:\n- `profile`: Apply to the whole profile. \n- `pattern`: Data set mask, where `%` matches one character, `*` matches within a qualifier and `**` matches any qualifiers.\n- `uss`: z/OS Unix path glob, e.g. `/prod/**`.\n\nRight click a data set or file and select **Make Writable** to override this setting for it in the current session.": ""
+  },
+  "zowe.readOnly.rules.profile": {
+    "Profile name the rule applies to.": ""
+  },
+  "zowe.readOnly.rules.pattern": {
+    "Data set mask": ""
+  },
+  "zowe.readOnly.rules.uss": {
+    "z/OS Unix path glob, e.g. /prod/**": ""
+  },
   "pdsSearchFor": {
     "Search PDS Members": ""
   },

@@ -10,11 +10,12 @@
  */
 
 import * as vscode from "vscode";
-import { ZoweScheme } from "@zowe/zowe-explorer-api";
+import { IZoweTreeNode, ZoweScheme } from "@zowe/zowe-explorer-api";
 import { ReadOnlyManagement } from "../../../src/management/ReadOnlyManagement";
 import { SettingsConfig } from "../../../src/configuration/SettingsConfig";
 import { Constants } from "../../../src/configuration/Constants";
 import { MockedProperty } from "../../__mocks__/mockUtils";
+import { ZoweLocalStorage } from "../../../src/tools/ZoweLocalStorage";
 
 describe("ReadOnlyManagement - dsMaskToRegex", () => {
     const matches = (mask: string, dsName: string, includeLowerLevels?: boolean): boolean =>
@@ -663,5 +664,442 @@ describe("ReadOnlyManagement - isReadOnly with zowe.readOnly.rules", () => {
             expect(ReadOnlyManagement.isReadOnly(ds("/zosmf/Z02589.JCL"))).toBe(false);
             configChangeMock[Symbol.dispose]();
         });
+    });
+});
+
+const resetState = (): void => {
+    (ReadOnlyManagement as any).overrides.clear();
+    useRules(zxploreRules);
+};
+
+const treeNode = (uri: vscode.Uri | undefined, contextValue: string | undefined, extra: Partial<IZoweTreeNode> = {}): IZoweTreeNode =>
+    ({ label: uri?.path.split("/").pop(), resourceUri: uri, contextValue, ...extra }) as IZoweTreeNode;
+
+describe("ReadOnlyManagement - isSupportedUri", () => {
+    it.each([
+        ["a data set", ds("/zosmf/Z02589.JCL"), true],
+        ["a PDS member", ds("/zosmf/Z02589.JCL/HELLO"), true],
+        ["a data set profile", ds("/zosmf"), true],
+        ["a USS file", uss("/zosmf/z/z02589/hello.txt"), true],
+        ["a USS profile", uss("/zosmf"), true],
+        ["a job spool file", vscode.Uri.from({ scheme: ZoweScheme.Jobs, path: "/zosmf/Z02589/JOB01234/JES2.JESMSGLG.2" }), false],
+        ["a local file", vscode.Uri.file("/z/z02589/hello.txt"), false],
+        ["an untitled document", vscode.Uri.from({ scheme: "untitled", path: "Untitled-1" }), false],
+        ["an undefined URI", undefined, false],
+    ])("for %s returns %s", (_desc, uri, expected) => {
+        expect(ReadOnlyManagement.isSupportedUri(uri as vscode.Uri)).toBe(expected);
+    });
+});
+
+describe("ReadOnlyManagement - applyPermission", () => {
+    const fileStat = (): vscode.FileStat => ({ type: vscode.FileType.File, ctime: 1, mtime: 2, size: 3 });
+    const dirStat = (): vscode.FileStat => ({ type: vscode.FileType.Directory, ctime: 1, mtime: 2, size: 0 });
+
+    beforeEach(resetState);
+    afterEach(() => {
+        (ReadOnlyManagement as any).ruleCache = undefined;
+        vi.restoreAllMocks();
+    });
+
+    it("marks a read-only file as read-only and keeps its other stats", () => {
+        const stat = fileStat();
+        expect(ReadOnlyManagement.applyPermission(ds("/zosmf/ZXP.PUBLIC.JCL/README"), stat)).toStrictEqual({
+            ...stat,
+            permissions: vscode.FilePermission.Readonly,
+        });
+    });
+
+    it("does not modify the original stat object", () => {
+        const stat = fileStat();
+        ReadOnlyManagement.applyPermission(uss("/zosmf/bin/sh"), stat);
+        expect(stat.permissions).toBeUndefined();
+    });
+
+    it("returns the same stat for a writable file", () => {
+        const stat = fileStat();
+        expect(ReadOnlyManagement.applyPermission(ds("/zosmf/Z02589.JCL/HELLO"), stat)).toBe(stat);
+        expect(ReadOnlyManagement.applyPermission(uss("/zosmf/z/z02589/hello.txt"), stat)).toBe(stat);
+    });
+
+    it("does not mark directories as read-only", () => {
+        const stat = dirStat();
+        expect(ReadOnlyManagement.applyPermission(ds("/zosmf/ZXP.PUBLIC.JCL"), stat)).toBe(stat);
+        expect(ReadOnlyManagement.applyPermission(uss("/zosmf/etc"), stat)).toBe(stat);
+    });
+
+    it("marks a file opened from a readonly=true link as read-only", () => {
+        expect(ReadOnlyManagement.applyPermission(ds("/zosmf/Z02589.JCL/HELLO", "readonly=true"), fileStat()).permissions).toBe(
+            vscode.FilePermission.Readonly
+        );
+    });
+
+    it("marks a file made read-only from the tree as read-only", () => {
+        ReadOnlyManagement.setReadOnly(ds("/zosmf/Z02589.JCL"), true);
+        expect(ReadOnlyManagement.applyPermission(ds("/zosmf/Z02589.JCL/HELLO"), fileStat()).permissions).toBe(vscode.FilePermission.Readonly);
+    });
+
+    it("returns a null or undefined stat as-is", () => {
+        expect(ReadOnlyManagement.applyPermission(ds("/zosmf/ZXP.PUBLIC.JCL/README"), null as any)).toBeNull();
+        expect(ReadOnlyManagement.applyPermission(ds("/zosmf/ZXP.PUBLIC.JCL/README"), undefined as any)).toBeUndefined();
+    });
+
+    it("returns the stat as-is for URIs outside the data set and USS file systems", () => {
+        const stat = fileStat();
+        expect(ReadOnlyManagement.applyPermission(vscode.Uri.file("/bin/sh"), stat)).toBe(stat);
+    });
+});
+
+describe("ReadOnlyManagement - setReadOnly", () => {
+    beforeEach(resetState);
+    afterEach(() => {
+        (ReadOnlyManagement as any).ruleCache = undefined;
+        vi.restoreAllMocks();
+    });
+
+    describe("data sets", () => {
+        it("makes a writable PDS and its members read-only", () => {
+            ReadOnlyManagement.setReadOnly(ds("/zosmf/Z02589.JCL"), true);
+            expect(ReadOnlyManagement.isReadOnly(ds("/zosmf/Z02589.JCL"))).toBe(true);
+            expect(ReadOnlyManagement.isReadOnly(ds("/zosmf/Z02589.JCL/HELLO"))).toBe(true);
+            expect(ReadOnlyManagement.isReadOnly(ds("/zosmf/Z02589.SOURCE/HELLO"))).toBe(false);
+        });
+
+        it("makes a PDS that a rule makes read-only writable, along with its members", () => {
+            ReadOnlyManagement.setReadOnly(ds("/zosmf/ZXP.PUBLIC.JCL"), false);
+            expect(ReadOnlyManagement.isReadOnly(ds("/zosmf/ZXP.PUBLIC.JCL"))).toBe(false);
+            expect(ReadOnlyManagement.isReadOnly(ds("/zosmf/ZXP.PUBLIC.JCL/README"))).toBe(false);
+            expect(ReadOnlyManagement.isReadOnly(ds("/zosmf/ZXP.PUBLIC.SOURCE/HELLO"))).toBe(true);
+        });
+
+        it("makes a single member read-only without affecting the other members", () => {
+            ReadOnlyManagement.setReadOnly(ds("/zosmf/Z02589.JCL/HELLO"), true);
+            expect(ReadOnlyManagement.isReadOnly(ds("/zosmf/Z02589.JCL/HELLO"))).toBe(true);
+            expect(ReadOnlyManagement.isReadOnly(ds("/zosmf/Z02589.JCL/COMPILE"))).toBe(false);
+            expect(ReadOnlyManagement.isReadOnly(ds("/zosmf/Z02589.JCL"))).toBe(false);
+        });
+
+        it("lets a member override its PDS", () => {
+            ReadOnlyManagement.setReadOnly(ds("/zosmf/Z02589.JCL"), true);
+            ReadOnlyManagement.setReadOnly(ds("/zosmf/Z02589.JCL/HELLO"), false);
+            expect(ReadOnlyManagement.isReadOnly(ds("/zosmf/Z02589.JCL/HELLO"))).toBe(false);
+            expect(ReadOnlyManagement.isReadOnly(ds("/zosmf/Z02589.JCL/COMPILE"))).toBe(true);
+        });
+
+        it("clears member overrides when their PDS is changed", () => {
+            ReadOnlyManagement.setReadOnly(ds("/zosmf/Z02589.JCL/HELLO"), false);
+            ReadOnlyManagement.setReadOnly(ds("/zosmf/Z02589.JCL/COMPILE"), true);
+            ReadOnlyManagement.setReadOnly(ds("/zosmf/Z02589.JCL"), true);
+            expect(ReadOnlyManagement.isReadOnly(ds("/zosmf/Z02589.JCL/HELLO"))).toBe(true);
+            expect(ReadOnlyManagement.isReadOnly(ds("/zosmf/Z02589.JCL/COMPILE"))).toBe(true);
+        });
+
+        it("does not treat data sets with more qualifiers as children", () => {
+            ReadOnlyManagement.setReadOnly(ds("/zosmf/Z02589.JCL.BACKUP"), true);
+            ReadOnlyManagement.setReadOnly(ds("/zosmf/Z02589.JCL"), false);
+            expect(ReadOnlyManagement.isReadOnly(ds("/zosmf/Z02589.JCL.BACKUP"))).toBe(true);
+
+            ReadOnlyManagement.setReadOnly(ds("/zosmf/Z02589.JCL"), true);
+            expect(ReadOnlyManagement.isReadOnly(ds("/zosmf/Z02589.JCL.BACKUP/HELLO"))).toBe(true);
+            expect(ReadOnlyManagement.isReadOnly(ds("/zosmf/Z02589.JCLLIB"))).toBe(false);
+        });
+
+        it("lets a member override a member rule", () => {
+            ReadOnlyManagement.setReadOnly(ds("/zosmf/Z02589.JCL/PRODJOB"), false);
+            expect(ReadOnlyManagement.isReadOnly(ds("/zosmf/Z02589.JCL/PRODJOB"))).toBe(false);
+            expect(ReadOnlyManagement.isReadOnly(ds("/zosmf/Z02589.JCL/PRODRUN"))).toBe(true);
+        });
+
+        it("ignores the file extension added to member URIs", () => {
+            ReadOnlyManagement.setReadOnly(ds("/zosmf/Z02589.JCL/HELLO.jcl"), true);
+            expect(ReadOnlyManagement.isReadOnly(ds("/zosmf/Z02589.JCL/HELLO"))).toBe(true);
+
+            ReadOnlyManagement.setReadOnly(ds("/zosmf/ZXP.PUBLIC.CBL/HELLO"), false);
+            expect(ReadOnlyManagement.isReadOnly(ds("/zosmf/ZXP.PUBLIC.CBL/HELLO.cbl"))).toBe(false);
+        });
+
+        it("makes everything in a profile read-only, then back to what the rules decide", () => {
+            ReadOnlyManagement.setReadOnly(ds("/zosmf"), true);
+            expect(ReadOnlyManagement.isReadOnly(ds("/zosmf"))).toBe(true);
+            expect(ReadOnlyManagement.isReadOnly(ds("/zosmf/Z02589.JCL/HELLO"))).toBe(true);
+            expect(ReadOnlyManagement.isReadOnly(ds("/ssh/Z02589.JCL/HELLO"))).toBe(false);
+            expect(ReadOnlyManagement.isReadOnly(uss("/zosmf/z/z02589/hello.txt"))).toBe(false);
+
+            ReadOnlyManagement.setReadOnly(ds("/zosmf"), false);
+            expect(ReadOnlyManagement.isReadOnly(ds("/zosmf"))).toBe(false);
+            expect(ReadOnlyManagement.isReadOnly(ds("/zosmf/Z02589.JCL/HELLO"))).toBe(false);
+            expect(ReadOnlyManagement.isReadOnly(ds("/zosmf/ZXP.PUBLIC.JCL/README"))).toBe(true);
+        });
+
+        it("makes a profile that a profile rule makes read-only writable", () => {
+            ReadOnlyManagement.setReadOnly(ds("/zosmf_prod"), false);
+            expect(ReadOnlyManagement.isReadOnly(ds("/zosmf_prod/Z02589.JCL/HELLO"))).toBe(false);
+            expect(ReadOnlyManagement.isReadOnly(uss("/zosmf_prod/z/z02589/hello.txt"))).toBe(true);
+        });
+    });
+
+    describe("USS", () => {
+        it("makes a writable directory and everything in it read-only", () => {
+            ReadOnlyManagement.setReadOnly(uss("/zosmf/z/z02589/cobol"), true);
+            expect(ReadOnlyManagement.isReadOnly(uss("/zosmf/z/z02589/cobol"))).toBe(true);
+            expect(ReadOnlyManagement.isReadOnly(uss("/zosmf/z/z02589/cobol/hello.cbl"))).toBe(true);
+            expect(ReadOnlyManagement.isReadOnly(uss("/zosmf/z/z02589/cobol/copybooks/record.cpy"))).toBe(true);
+            expect(ReadOnlyManagement.isReadOnly(uss("/zosmf/z/z02589/hello.txt"))).toBe(false);
+        });
+
+        it("makes a directory that a rule makes read-only writable", () => {
+            ReadOnlyManagement.setReadOnly(uss("/zosmf/PROD"), false);
+            expect(ReadOnlyManagement.isReadOnly(uss("/zosmf/PROD/app/config.yaml"))).toBe(false);
+            expect(ReadOnlyManagement.isReadOnly(uss("/zosmf/bin/sh"))).toBe(true);
+        });
+
+        it("does not treat directories with the same prefix as children", () => {
+            ReadOnlyManagement.setReadOnly(uss("/zosmf/z/public"), true);
+            expect(ReadOnlyManagement.isReadOnly(uss("/zosmf/z/publicity/hello.txt"))).toBe(false);
+        });
+
+        it("lets a file override its directory", () => {
+            ReadOnlyManagement.setReadOnly(uss("/zosmf/etc/profile"), false);
+            expect(ReadOnlyManagement.isReadOnly(uss("/zosmf/etc/profile"))).toBe(false);
+            expect(ReadOnlyManagement.isReadOnly(uss("/zosmf/etc/ssh/sshd_config"))).toBe(true);
+        });
+
+        it("clears file overrides when their directory is changed", () => {
+            ReadOnlyManagement.setReadOnly(uss("/zosmf/z/z02589/hello.txt"), true);
+            ReadOnlyManagement.setReadOnly(uss("/zosmf/z/z02589"), false);
+            expect(ReadOnlyManagement.isReadOnly(uss("/zosmf/z/z02589/hello.txt"))).toBe(false);
+        });
+
+        it("keeps data set and USS overrides separate for the same profile", () => {
+            ReadOnlyManagement.setReadOnly(uss("/zosmf"), true);
+            expect(ReadOnlyManagement.isReadOnly(uss("/zosmf/z/z02589/hello.txt"))).toBe(true);
+            expect(ReadOnlyManagement.isReadOnly(ds("/zosmf/Z02589.JCL/HELLO"))).toBe(false);
+        });
+    });
+
+    describe("override lifecycle", () => {
+        it("does not store an override when the resource is already in the requested state", () => {
+            ReadOnlyManagement.setReadOnly(ds("/zosmf/Z02589.JCL"), false);
+            ReadOnlyManagement.setReadOnly(ds("/zosmf/ZXP.PUBLIC.JCL"), true);
+            expect((ReadOnlyManagement as any).overrides.size).toBe(0);
+
+            // With no override stored, later rule changes still apply
+            useRules([{ pattern: "Z02589.**" }]);
+            expect(ReadOnlyManagement.isReadOnly(ds("/zosmf/Z02589.JCL"))).toBe(true);
+            expect(ReadOnlyManagement.isReadOnly(ds("/zosmf/ZXP.PUBLIC.JCL"))).toBe(false);
+        });
+
+        it("removes the override when a resource is changed back", () => {
+            ReadOnlyManagement.setReadOnly(ds("/zosmf/Z02589.JCL"), true);
+            ReadOnlyManagement.setReadOnly(ds("/zosmf/Z02589.JCL"), false);
+            expect(ReadOnlyManagement.isReadOnly(ds("/zosmf/Z02589.JCL"))).toBe(false);
+            expect((ReadOnlyManagement as any).overrides.size).toBe(0);
+        });
+
+        it("keeps overrides in place when the rules change", () => {
+            ReadOnlyManagement.setReadOnly(ds("/zosmf/ZXP.PUBLIC.JCL"), false);
+            ReadOnlyManagement.setReadOnly(uss("/zosmf/z/z02589"), true);
+            useRules([]);
+            expect(ReadOnlyManagement.isReadOnly(ds("/zosmf/ZXP.PUBLIC.JCL"))).toBe(false);
+            expect(ReadOnlyManagement.isReadOnly(uss("/zosmf/z/z02589/hello.txt"))).toBe(true);
+        });
+
+        it("does not let an override make a readonly=true link writable", () => {
+            ReadOnlyManagement.setReadOnly(ds("/zosmf/Z02589.JCL/HELLO", "readonly=true"), false);
+            expect(ReadOnlyManagement.isReadOnly(ds("/zosmf/Z02589.JCL/HELLO", "readonly=true"))).toBe(true);
+            expect(ReadOnlyManagement.isReadOnly(ds("/zosmf/Z02589.JCL/HELLO"))).toBe(false);
+        });
+
+        it("ignores the query when storing an override", () => {
+            ReadOnlyManagement.setReadOnly(ds("/zosmf/Z02589.JCL/HELLO", "readonly=true"), true);
+            expect(ReadOnlyManagement.isReadOnly(ds("/zosmf/Z02589.JCL/HELLO"))).toBe(true);
+            expect(ReadOnlyManagement.isReadOnly(ds("/zosmf/Z02589.JCL/HELLO", "fetch=true"))).toBe(true);
+        });
+
+        it("only keeps overrides for the current session", () => {
+            const setValueSpy = vi.spyOn(ZoweLocalStorage, "setValue");
+            ReadOnlyManagement.setReadOnly(ds("/zosmf/Z02589.JCL"), true);
+            ReadOnlyManagement.setReadOnly(uss("/zosmf/PROD"), false);
+            expect(setValueSpy).not.toHaveBeenCalled();
+        });
+
+        it("fires onDidChange once for each change", () => {
+            const listener = vi.fn();
+            const subscription = ReadOnlyManagement.onDidChange(listener);
+            ReadOnlyManagement.setReadOnly(ds("/zosmf/Z02589.JCL"), true);
+            ReadOnlyManagement.setReadOnly(uss("/zosmf/PROD"), false);
+            expect(listener).toHaveBeenCalledTimes(2);
+            subscription.dispose();
+        });
+    });
+});
+
+describe("ReadOnlyManagement - initialize and onDidChange", () => {
+    let onConfigChange: (e: vscode.ConfigurationChangeEvent) => void;
+    let configChangeMock: MockedProperty;
+    const disposable = new vscode.Disposable(vi.fn());
+
+    beforeEach(() => {
+        resetState();
+        configChangeMock = new MockedProperty(
+            vscode.workspace,
+            "onDidChangeConfiguration",
+            undefined,
+            vi.fn().mockImplementation((listener) => {
+                onConfigChange = listener;
+                return disposable;
+            })
+        );
+    });
+
+    afterEach(() => {
+        configChangeMock[Symbol.dispose]();
+        (ReadOnlyManagement as any).ruleCache = undefined;
+        vi.restoreAllMocks();
+    });
+
+    it("registers its configuration listener with the extension context", () => {
+        const context = { subscriptions: [] as vscode.Disposable[] };
+        ReadOnlyManagement.initialize(context as any);
+        expect(context.subscriptions).toContain(disposable);
+    });
+
+    it("fires onDidChange when the rules setting changes", () => {
+        ReadOnlyManagement.initialize({ subscriptions: [] } as any);
+        const listener = vi.fn();
+        const subscription = ReadOnlyManagement.onDidChange(listener);
+        onConfigChange({ affectsConfiguration: (key: string) => key === Constants.SETTINGS_READ_ONLY_RULES });
+        expect(listener).toHaveBeenCalledTimes(1);
+        subscription.dispose();
+    });
+
+    it("does not fire onDidChange when an unrelated setting changes", () => {
+        ReadOnlyManagement.initialize({ subscriptions: [] } as any);
+        const listener = vi.fn();
+        const subscription = ReadOnlyManagement.onDidChange(listener);
+        onConfigChange({ affectsConfiguration: (key: string) => key === "zowe.ds.default.sort" });
+        expect(listener).not.toHaveBeenCalled();
+        subscription.dispose();
+    });
+
+    it("fires onDidChange when notifyChanged is called", () => {
+        const listener = vi.fn();
+        const subscription = ReadOnlyManagement.onDidChange(listener);
+        ReadOnlyManagement.notifyChanged();
+        expect(listener).toHaveBeenCalledTimes(1);
+        subscription.dispose();
+    });
+});
+
+describe("ReadOnlyManagement - isEligibleNode", () => {
+    it.each([
+        ["a sequential data set", ds("/zosmf/Z02589.OUTPUT"), Constants.DS_DS_CONTEXT],
+        ["a binary sequential data set", ds("/zosmf/Z02589.LOAD.BIN"), Constants.DS_DS_BINARY_CONTEXT],
+        ["a favorited sequential data set", ds("/zosmf/Z02589.OUTPUT"), Constants.DS_FAV_CONTEXT],
+        ["a PDS", ds("/zosmf/Z02589.JCL"), Constants.DS_PDS_CONTEXT],
+        ["a favorited PDS", ds("/zosmf/Z02589.JCL"), Constants.DS_PDS_CONTEXT + Constants.FAV_SUFFIX],
+        ["a filtered PDS", ds("/zosmf/Z02589.JCL"), Constants.DS_PDS_CONTEXT + Constants.CONTEXT_PREFIX + Constants.FILTER_SEARCH],
+        ["a PDS member", ds("/zosmf/Z02589.JCL/HELLO"), Constants.DS_MEMBER_CONTEXT],
+        ["a binary PDS member", ds("/zosmf/Z02589.LOADLIB/HELLO"), Constants.DS_MEMBER_BINARY_CONTEXT],
+        ["a data set profile", ds("/zosmf"), Constants.DS_SESSION_CONTEXT + Constants.ACTIVE_CONTEXT],
+        ["a favorited data set profile", ds("/zosmf"), Constants.DS_SESSION_FAV_CONTEXT],
+        ["a USS profile", uss("/zosmf"), Constants.USS_SESSION_CONTEXT + Constants.ACTIVE_CONTEXT],
+        ["a filtered USS profile", uss("/zosmf"), Constants.USS_SESSION_CONTEXT + Constants.CONTEXT_PREFIX + Constants.FILTER_SEARCH],
+        ["a USS directory", uss("/zosmf/z/z02589/cobol"), Constants.USS_DIR_CONTEXT],
+        ["a favorited USS directory", uss("/zosmf/z/z02589/cobol"), Constants.USS_FAV_DIR_CONTEXT],
+        ["a USS text file", uss("/zosmf/z/z02589/hello.cbl"), Constants.USS_TEXT_FILE_CONTEXT],
+        ["a favorited USS text file", uss("/zosmf/z/z02589/hello.cbl"), Constants.USS_FAV_TEXT_FILE_CONTEXT],
+        ["a USS binary file", uss("/zosmf/z/z02589/hello"), Constants.USS_BINARY_FILE_CONTEXT],
+    ])("returns true for %s", (_desc, uri, contextValue) => {
+        expect(ReadOnlyManagement.isEligibleNode(treeNode(uri, contextValue))).toBe(true);
+    });
+
+    it.each([
+        ["a VSAM data set", ds("/zosmf/Z02589.KSDS"), Constants.VSAM_CONTEXT],
+        ["a migrated data set", ds("/zosmf/Z02589.OLD.JCL"), Constants.DS_MIGRATED_FILE_CONTEXT],
+        ["a member that failed to load", ds("/zosmf/Z02589.JCL/BROKEN"), Constants.DS_FILE_ERROR_MEMBER_CONTEXT],
+        ["an information placeholder", ds("/zosmf/Z02589.JCL"), Constants.INFORMATION_CONTEXT],
+        ["a jobs profile", vscode.Uri.from({ scheme: ZoweScheme.Jobs, path: "/zosmf" }), Constants.JOBS_SESSION_CONTEXT],
+        ["a job", vscode.Uri.from({ scheme: ZoweScheme.Jobs, path: "/zosmf/JOB01234" }), Constants.JOBS_JOB_CONTEXT],
+        ["a spool file", vscode.Uri.from({ scheme: ZoweScheme.Jobs, path: "/zosmf/JOB01234/JES2.JESMSGLG.2" }), Constants.JOBS_SPOOL_CONTEXT],
+        ["a data set node without a resource URI", undefined, Constants.DS_PDS_CONTEXT],
+        ["a data set node without a context value", ds("/zosmf/Z02589.JCL"), undefined],
+    ])("returns false for %s", (_desc, uri, contextValue) => {
+        expect(ReadOnlyManagement.isEligibleNode(treeNode(uri, contextValue))).toBe(false);
+    });
+
+    it("returns false for an undefined node", () => {
+        expect(ReadOnlyManagement.isEligibleNode(undefined as any)).toBe(false);
+    });
+});
+
+describe("ReadOnlyManagement - getTreeItem", () => {
+    beforeEach(resetState);
+    afterEach(() => {
+        (ReadOnlyManagement as any).ruleCache = undefined;
+        vi.restoreAllMocks();
+    });
+
+    it("returns the node itself if it is not eligible", () => {
+        const node = treeNode(ds("/zosmf/Z02589.KSDS"), Constants.VSAM_CONTEXT);
+        expect(ReadOnlyManagement.getTreeItem(node)).toBe(node);
+    });
+
+    it("adds the writable context to a writable node", () => {
+        const item = ReadOnlyManagement.getTreeItem(treeNode(ds("/zosmf/Z02589.JCL"), Constants.DS_PDS_CONTEXT));
+        expect(item.contextValue).toBe(Constants.DS_PDS_CONTEXT + Constants.WRITABLE_CONTEXT);
+    });
+
+    it("adds the read-only context to a node that a rule makes read-only", () => {
+        const item = ReadOnlyManagement.getTreeItem(treeNode(ds("/zosmf/ZXP.PUBLIC.JCL"), Constants.DS_PDS_CONTEXT));
+        expect(item.contextValue).toBe(Constants.DS_PDS_CONTEXT + Constants.READ_ONLY_CONTEXT);
+    });
+
+    it("adds the context after any existing suffixes", () => {
+        const contextValue = Constants.USS_SESSION_CONTEXT + Constants.ACTIVE_CONTEXT;
+        const item = ReadOnlyManagement.getTreeItem(treeNode(uss("/zosmf_prod"), contextValue));
+        expect(item.contextValue).toBe(contextValue + Constants.READ_ONLY_CONTEXT);
+    });
+
+    it("reflects changes made with setReadOnly", () => {
+        const node = treeNode(uss("/zosmf/z/z02589/hello.txt"), Constants.USS_TEXT_FILE_CONTEXT);
+        expect(ReadOnlyManagement.getTreeItem(node).contextValue).toBe(Constants.USS_TEXT_FILE_CONTEXT + Constants.WRITABLE_CONTEXT);
+        ReadOnlyManagement.setReadOnly(uss("/zosmf/z/z02589"), true);
+        expect(ReadOnlyManagement.getTreeItem(node).contextValue).toBe(Constants.USS_TEXT_FILE_CONTEXT + Constants.READ_ONLY_CONTEXT);
+    });
+
+    it("does not change the node's own context value", () => {
+        const node = treeNode(ds("/zosmf/ZXP.PUBLIC.JCL"), Constants.DS_PDS_CONTEXT);
+        const item = ReadOnlyManagement.getTreeItem(node);
+        expect(item).not.toBe(node);
+        expect(node.contextValue).toBe(Constants.DS_PDS_CONTEXT);
+    });
+
+    it("copies the properties used to render the node", () => {
+        const command = { command: "vscode.open", title: "", arguments: [ds("/zosmf/Z02589.JCL/HELLO")] };
+        const iconPath = new vscode.ThemeIcon("file");
+        const accessibilityInformation = { label: "HELLO member" };
+        const node = treeNode(ds("/zosmf/Z02589.JCL/HELLO"), Constants.DS_MEMBER_CONTEXT, {
+            label: "HELLO",
+            id: "zosmf.Z02589.JCL.HELLO",
+            collapsibleState: vscode.TreeItemCollapsibleState.None,
+            iconPath,
+            description: "2026/10/10",
+            tooltip: "Z02589.JCL(HELLO)",
+            command,
+            accessibilityInformation,
+            checkboxState: 0,
+        });
+
+        const item = ReadOnlyManagement.getTreeItem(node);
+        expect(item.label).toBe("HELLO");
+        expect(item.id).toBe("zosmf.Z02589.JCL.HELLO");
+        expect(item.collapsibleState).toBe(vscode.TreeItemCollapsibleState.None);
+        expect(item.iconPath).toBe(iconPath);
+        expect(item.description).toBe("2026/10/10");
+        expect(item.resourceUri).toBe(node.resourceUri);
+        expect(item.tooltip).toBe("Z02589.JCL(HELLO)");
+        expect(item.command).toBe(command);
+        expect(item.accessibilityInformation).toBe(accessibilityInformation);
+        expect(item.checkboxState).toBe(0);
     });
 });
