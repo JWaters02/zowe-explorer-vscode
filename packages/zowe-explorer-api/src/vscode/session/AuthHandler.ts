@@ -192,6 +192,29 @@ export class AuthHandler {
     }
 
     /**
+     * Whether the given profile can change its password on the remote system.
+     * @param profile The profile to check
+     * @returns {boolean} `true` if the API registered for the profile implements `changePassword`, `false` otherwise
+     */
+    private static async canChangePassword(profile: ProfileLike): Promise<boolean> {
+        try {
+            const apiRegister = ZoweVsCodeExtension.getZoweExplorerApi();
+            if (apiRegister == null) {
+                return false;
+            }
+            const loadedProfile = AuthHandler.isProfileLoaded(profile)
+                ? profile
+                : await ZoweVsCodeExtension.profilesCache.getLoadedProfConfig(profile);
+            return apiRegister.getCommonApi(loadedProfile)?.changePassword != null;
+        } catch (err) {
+            // The profile could not be loaded, or no API is registered for this profile type
+            const profileName = AuthHandler.getProfileName(profile);
+            imperative.Logger.getAppLogger().debug(`Change password is unavailable for ${profileName}: ${errorMessage(err)}`);
+            return false;
+        }
+    }
+
+    /**
      * Prompts the user to authenticate over SSO or a credential prompt in the event of an error.
      * @param profile The profile to authenticate
      * @param params {AuthPromptParams} Prompt parameters (login methods, using token auth, error correlation)
@@ -227,11 +250,44 @@ export class AuthHandler {
         }
 
         // Prompt the user to update their credentials using the given `promptCredentials` method.
+        // The server cannot tell us whether the password is wrong or expired, so offer to change it
+        // on the host whenever the profile supports it and let the user decide.
         const checkCredsButton = "Update Credentials";
-        const selection = await Gui.errorMessage(params.errorCorrelation?.message ?? params.imperativeError.message, {
-            items: [checkCredsButton],
-            vsCodeOpts: { modal: true },
-        });
+        const changePasswordButton = "Change Password";
+        const errorMsg = params.errorCorrelation?.message ?? params.imperativeError.message;
+        const canChangePassword = !params.isUsingTokenAuth && (await AuthHandler.canChangePassword(profile));
+        const selection = await Gui.errorMessage(
+            canChangePassword
+                ? `${errorMsg}\n\nIf your password has expired on the host, select "${changePasswordButton}" to set a new one.`
+                : errorMsg,
+            {
+                items: canChangePassword ? [checkCredsButton, changePasswordButton] : [checkCredsButton],
+                vsCodeOpts: { modal: true },
+            }
+        );
+
+        if (selection === changePasswordButton) {
+            try {
+                if ((await ZoweVsCodeExtension.changePassword({ serviceProfile: profile })) != null) {
+                    // Unlock profile so it can be used again
+                    AuthHandler.unlockProfile(profileName, true);
+                    return true;
+                }
+            } catch (err) {
+                Gui.warningMessage(
+                    `The password was changed on the host for ${profileName}, but the stored credentials could not be updated. ` +
+                        `Select "Update Credentials" to store the new password. ${errorMessage(err)}`
+                );
+                return false;
+            }
+
+            // The password was not changed, either because the user cancelled or the host rejected it
+            AuthHandler.setAuthCancelled(profileName, true);
+            if (params.throwErrorOnCancel) {
+                throw new AuthCancelledError(profileName, "User cancelled during password change");
+            }
+            return false;
+        }
 
         if (selection !== checkCredsButton) {
             // User cancelled the credential prompt

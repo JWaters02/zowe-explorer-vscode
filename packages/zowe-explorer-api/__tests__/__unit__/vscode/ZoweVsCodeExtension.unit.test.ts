@@ -1052,4 +1052,246 @@ describe("ZoweVsCodeExtension", () => {
             ).toEqual(true);
         });
     });
+
+    describe("changePassword", () => {
+        function createBlockMocks(): any {
+            const serviceProfile: imperative.IProfileLoaded = {
+                name: "testProfile",
+                type: "zosmf",
+                message: "",
+                failNotFound: false,
+                profile: { user: "IBMUSER", password: "oldPass1" },
+            };
+            const session = { ISession: { user: "IBMUSER", password: "oldPass1" } } as unknown as imperative.Session;
+            const changePassword = vi.fn().mockResolvedValue({ success: true, returnCode: 0, reasonCode: 0, message: "" });
+            const updateProperty = vi.fn();
+            const updateCachedProfile = vi.fn();
+            const onProfileUpdatedEmitter = { fire: vi.fn() };
+
+            vi.spyOn(ZoweVsCodeExtension, "onProfileUpdatedEmitter", "get").mockReturnValue(onProfileUpdatedEmitter as any);
+            vi.spyOn(ZoweVsCodeExtension as any, "profilesCache", "get").mockReturnValue({
+                getProfileInfo: vi.fn().mockResolvedValue({ updateProperty, isSecured: vi.fn().mockReturnValue(true) }),
+                updateCachedProfile,
+            });
+
+            return {
+                serviceProfile,
+                session,
+                changePassword,
+                updateProperty,
+                updateCachedProfile,
+                onProfileUpdatedEmitter,
+                zeRegister: {
+                    getCommonApi: vi.fn().mockReturnValue({ changePassword, getSession: vi.fn().mockReturnValue(session) }),
+                } as unknown as Types.IApiRegisterClient,
+            };
+        }
+
+        it("should change the password and update the stored credentials", async () => {
+            const blockMocks = createBlockMocks();
+            vi.spyOn(Gui, "showInputBox")
+                .mockResolvedValueOnce("oldPass1") // current password
+                .mockResolvedValueOnce("newPass456") // new password
+                .mockResolvedValueOnce("newPass456"); // confirm
+
+            const updatedProfile = await ZoweVsCodeExtension.changePassword({
+                serviceProfile: blockMocks.serviceProfile,
+                zeRegister: blockMocks.zeRegister,
+            });
+
+            expect(blockMocks.changePassword).toHaveBeenCalledWith(blockMocks.session, "newPass456");
+            expect(blockMocks.updateProperty).toHaveBeenCalledWith({
+                profileName: "testProfile",
+                profileType: "zosmf",
+                property: "password",
+                value: "newPass456",
+                setSecure: true,
+            });
+            expect(updatedProfile.profile.password).toBe("newPass456");
+            expect(blockMocks.session.ISession.password).toBe("newPass456");
+            expect(blockMocks.onProfileUpdatedEmitter.fire).toHaveBeenCalledWith(updatedProfile);
+        });
+
+        it("should resolve the profile by name when a string is given", async () => {
+            const blockMocks = createBlockMocks();
+            const getLoadedProfConfig = vi.fn().mockResolvedValue(blockMocks.serviceProfile);
+            vi.spyOn(Gui, "showInputBox")
+                .mockResolvedValueOnce("oldPass1")
+                .mockResolvedValueOnce("newPass456")
+                .mockResolvedValueOnce("newPass456");
+
+            const updatedProfile = await ZoweVsCodeExtension.changePassword({
+                serviceProfile: "testProfile",
+                zeRegister: blockMocks.zeRegister,
+                zeProfiles: {
+                    getLoadedProfConfig,
+                    getProfileInfo: vi.fn().mockResolvedValue({ updateProperty: vi.fn(), isSecured: vi.fn().mockReturnValue(true) }),
+                    updateCachedProfile: vi.fn(),
+                } as unknown as ProfilesCache,
+            });
+
+            expect(getLoadedProfConfig).toHaveBeenCalledWith("testProfile");
+            expect(updatedProfile).toBe(blockMocks.serviceProfile);
+        });
+
+        it("should return undefined when the API does not support changing passwords", async () => {
+            const blockMocks = createBlockMocks();
+            const errorMessageSpy = vi.spyOn(Gui, "errorMessage").mockResolvedValue(undefined);
+
+            const updatedProfile = await ZoweVsCodeExtension.changePassword({
+                serviceProfile: blockMocks.serviceProfile,
+                zeRegister: { getCommonApi: vi.fn().mockReturnValue({ getSession: vi.fn() }) } as unknown as Types.IApiRegisterClient,
+            });
+
+            expect(updatedProfile).toBeUndefined();
+            expect(errorMessageSpy).toHaveBeenCalledWith(expect.stringContaining("Change Password is not supported"));
+        });
+
+        it("should return undefined when the API is not registered for the profile type", async () => {
+            const blockMocks = createBlockMocks();
+            const errorMessageSpy = vi.spyOn(Gui, "errorMessage").mockResolvedValue(undefined);
+
+            const updatedProfile = await ZoweVsCodeExtension.changePassword({
+                serviceProfile: blockMocks.serviceProfile,
+                zeRegister: {
+                    getCommonApi: vi.fn().mockImplementation(() => {
+                        throw new Error("No API");
+                    }),
+                } as unknown as Types.IApiRegisterClient,
+            });
+
+            expect(updatedProfile).toBeUndefined();
+            expect(errorMessageSpy).toHaveBeenCalledWith("No API found for the selected profile.");
+        });
+
+        it("should return undefined when the current password does not match the stored credentials", async () => {
+            const blockMocks = createBlockMocks();
+            const errorMessageSpy = vi.spyOn(Gui, "errorMessage").mockResolvedValue(undefined);
+            vi.spyOn(Gui, "showInputBox").mockResolvedValueOnce("wrongPassword");
+
+            const updatedProfile = await ZoweVsCodeExtension.changePassword({
+                serviceProfile: blockMocks.serviceProfile,
+                zeRegister: blockMocks.zeRegister,
+            });
+
+            expect(updatedProfile).toBeUndefined();
+            expect(blockMocks.changePassword).not.toHaveBeenCalled();
+            expect(errorMessageSpy).toHaveBeenCalledWith(expect.stringContaining("Current password does not match"));
+        });
+
+        it("should let the server validate the current password when it is not stored locally", async () => {
+            const blockMocks = createBlockMocks();
+            blockMocks.session.ISession.password = undefined;
+            vi.spyOn(Gui, "showInputBox")
+                .mockResolvedValueOnce("someOldPass")
+                .mockResolvedValueOnce("newPass456")
+                .mockResolvedValueOnce("newPass456");
+
+            await ZoweVsCodeExtension.changePassword({
+                serviceProfile: blockMocks.serviceProfile,
+                zeRegister: blockMocks.zeRegister,
+            });
+
+            expect(blockMocks.changePassword).toHaveBeenCalledWith(blockMocks.session, "newPass456");
+        });
+
+        it("should clear the unverified password from the session when the server rejects the change", async () => {
+            const blockMocks = createBlockMocks();
+            blockMocks.session.ISession.password = undefined;
+            blockMocks.changePassword.mockRejectedValueOnce(new Error("Authentication failed"));
+            const errorMessageSpy = vi.spyOn(Gui, "errorMessage").mockResolvedValue(undefined);
+            vi.spyOn(Gui, "showInputBox")
+                .mockResolvedValueOnce("wrongOldPass")
+                .mockResolvedValueOnce("newPass456")
+                .mockResolvedValueOnce("newPass456");
+
+            const updatedProfile = await ZoweVsCodeExtension.changePassword({
+                serviceProfile: blockMocks.serviceProfile,
+                zeRegister: blockMocks.zeRegister,
+            });
+
+            expect(updatedProfile).toBeUndefined();
+            expect(blockMocks.session.ISession.password).toBeUndefined();
+            expect(errorMessageSpy).toHaveBeenCalledWith(expect.stringContaining("Failed to change password: Authentication failed"));
+        });
+
+        it("should return undefined when the response is unsuccessful", async () => {
+            const blockMocks = createBlockMocks();
+            blockMocks.changePassword.mockResolvedValueOnce({ success: false, returnCode: 8, reasonCode: 2, message: "Change failed." });
+            const errorMessageSpy = vi.spyOn(Gui, "errorMessage").mockResolvedValue(undefined);
+            vi.spyOn(Gui, "showInputBox")
+                .mockResolvedValueOnce("oldPass1")
+                .mockResolvedValueOnce("newPass456")
+                .mockResolvedValueOnce("newPass456");
+
+            const updatedProfile = await ZoweVsCodeExtension.changePassword({
+                serviceProfile: blockMocks.serviceProfile,
+                zeRegister: blockMocks.zeRegister,
+            });
+
+            expect(updatedProfile).toBeUndefined();
+            expect(errorMessageSpy).toHaveBeenCalledWith(expect.stringContaining("Failed to change password: Change failed."));
+        });
+
+        it("should throw when the stored credentials cannot be updated after a successful change", async () => {
+            const blockMocks = createBlockMocks();
+            blockMocks.updateProperty.mockRejectedValueOnce(new Error("Disk write error"));
+            vi.spyOn(Gui, "showInputBox")
+                .mockResolvedValueOnce("oldPass1")
+                .mockResolvedValueOnce("newPass456")
+                .mockResolvedValueOnce("newPass456");
+
+            await expect(
+                ZoweVsCodeExtension.changePassword({
+                    serviceProfile: blockMocks.serviceProfile,
+                    zeRegister: blockMocks.zeRegister,
+                })
+            ).rejects.toThrow("Disk write error");
+            expect(blockMocks.changePassword).toHaveBeenCalled();
+        });
+
+        it.each([
+            ["current password", []],
+            ["new password", ["oldPass1"]],
+            ["confirmation", ["oldPass1", "newPass456"]],
+        ])("should cancel when the %s input is dismissed", async (_label, entered: string[]) => {
+            const blockMocks = createBlockMocks();
+            const infoMessageSpy = vi.spyOn(Gui, "infoMessage").mockResolvedValue(undefined);
+            const showInputBoxSpy = vi.spyOn(Gui, "showInputBox");
+            for (const value of entered) {
+                showInputBoxSpy.mockResolvedValueOnce(value);
+            }
+            showInputBoxSpy.mockResolvedValueOnce(undefined);
+
+            const updatedProfile = await ZoweVsCodeExtension.changePassword({
+                serviceProfile: blockMocks.serviceProfile,
+                zeRegister: blockMocks.zeRegister,
+            });
+
+            expect(updatedProfile).toBeUndefined();
+            expect(blockMocks.changePassword).not.toHaveBeenCalled();
+            expect(infoMessageSpy).toHaveBeenCalledWith("Operation cancelled");
+        });
+
+        it.each([
+            ["the new password matches the current one", ["oldPass1", "oldPass1"], "New password cannot be the same"],
+            ["the confirmation does not match", ["oldPass1", "newPass456", "differentPass"], "Passwords do not match"],
+        ])("should return undefined when %s", async (_label, entered: string[], expectedMessage: string) => {
+            const blockMocks = createBlockMocks();
+            const errorMessageSpy = vi.spyOn(Gui, "errorMessage").mockResolvedValue(undefined);
+            const showInputBoxSpy = vi.spyOn(Gui, "showInputBox");
+            for (const value of entered) {
+                showInputBoxSpy.mockResolvedValueOnce(value);
+            }
+
+            const updatedProfile = await ZoweVsCodeExtension.changePassword({
+                serviceProfile: blockMocks.serviceProfile,
+                zeRegister: blockMocks.zeRegister,
+            });
+
+            expect(updatedProfile).toBeUndefined();
+            expect(blockMocks.changePassword).not.toHaveBeenCalled();
+            expect(errorMessageSpy).toHaveBeenCalledWith(expect.stringContaining(expectedMessage));
+        });
+    });
 });

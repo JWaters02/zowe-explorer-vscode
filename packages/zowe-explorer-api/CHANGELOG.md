@@ -15,6 +15,7 @@ All notable changes to the "zowe-explorer-api" extension will be documented in t
 - Added optional `ssoLogin` and `ssoLogout` functions to the `IApiExplorerExtender` interface to expose SSO login and logout capabilities to Zowe Explorer extenders. [#4137](https://github.com/zowe/zowe-explorer-vscode/issues/4137)
 - Added the `vscode-codicon-stylesheet` id to the codicons `<link>` in the webview HTML template so VS Code Elements components can render icons. [#4534](https://github.com/zowe/zowe-explorer-vscode/pull/4534)
 - Added the `changePassword` API which allows the user to update their password on the remote system, alongside its `IChangePasswordResponse` interface. [#4212](https://github.com/zowe/zowe-explorer-vscode/pull/4212)
+- Added a `changePassword` function to the `ZoweVsCodeExtension` class, which prompts for a new password, changes it on the remote system and updates the stored credentials. [#4212](https://github.com/zowe/zowe-explorer-vscode/pull/4212)
 
 ### Bug fixes
 

@@ -20,7 +20,9 @@ import { Gui } from "../globals/Gui";
 import type { PromptCredentialsOptions } from "./doc/PromptCredentials";
 import { Types } from "../Types";
 import type { BaseProfileAuthOptions } from "./doc/BaseProfileAuth";
-import { FileManagement } from "../utils";
+import type { ChangePasswordOptions } from "./doc/ChangePassword";
+import type { MainframeInteraction } from "../extend/MainframeInteraction";
+import { errorMessage, FileManagement } from "../utils";
 import { VscSettings } from "./doc/VscSettings";
 import { ZoweExplorerZosmf } from "../profiles/ZoweExplorerZosmfApi";
 
@@ -153,6 +155,155 @@ export class ZoweVsCodeExtension {
             return loadProfile;
         }
         return undefined;
+    }
+
+    /**
+     * Changes the password for a profile on the remote system, then updates the stored credentials to match.
+     *
+     * Unlike {@link updateCredentials}, which only updates what is stored locally,
+     * this contacts the server to change the password before writing it to the configuration or credential manager.
+     *
+     * The caller is responsible for releasing any authentication lock on the profile and for refreshing its tree node.
+     *
+     * @param options Set of options to use when changing the password
+     * @returns The updated profile, or `undefined` if the user cancelled or the password was not changed
+     * @throws If the password was changed on the server but the stored credentials could not be updated
+     */
+    public static async changePassword(options: ChangePasswordOptions): Promise<imperative.IProfileLoaded> {
+        const cache = options.zeProfiles ?? ZoweVsCodeExtension.profilesCache;
+        const apiRegister = options.zeRegister ?? ZoweVsCodeExtension.getZoweExplorerApi();
+        const loadProfile =
+            typeof options.serviceProfile === "string" ? await cache.getLoadedProfConfig(options.serviceProfile) : options.serviceProfile;
+
+        if (loadProfile == null) {
+            Gui.errorMessage(vscode.l10n.t("No profile found for the selected node."));
+            return undefined;
+        }
+
+        let commonApi: MainframeInteraction.ICommon;
+        try {
+            commonApi = apiRegister?.getCommonApi(loadProfile);
+        } catch (err) {
+            imperative.Logger.getAppLogger().debug(`Failed to get the common API for profile ${loadProfile.name}: ${errorMessage(err)}`);
+        }
+        if (commonApi == null) {
+            Gui.errorMessage(vscode.l10n.t("No API found for the selected profile."));
+            return undefined;
+        }
+        if (commonApi.changePassword == null) {
+            Gui.errorMessage(
+                vscode.l10n.t({
+                    message: 'Change Password is not supported for profile type "{0}".',
+                    args: [loadProfile.type],
+                    comment: ["Profile type"],
+                })
+            );
+            return undefined;
+        }
+
+        const session = commonApi.getSession(loadProfile);
+        if (!session) {
+            Gui.errorMessage(vscode.l10n.t("Unable to create a session for the selected profile."));
+            return undefined;
+        }
+
+        const oldPassword = await Gui.showInputBox({
+            prompt: vscode.l10n.t("Enter current password"),
+            password: true,
+            ignoreFocusOut: true,
+            placeHolder: vscode.l10n.t("Current Password"),
+        });
+        if (!oldPassword) {
+            Gui.infoMessage(vscode.l10n.t("Operation cancelled"));
+            return undefined;
+        }
+
+        // TODO: If the password changes on the server side before updating it through zowe explorer,
+        // this check will fail (if the user is aware that the password changed on server side and input it in old password).
+        // Should it do an actual check to the server to find out if the old password is valid for the username, or should this check be removed?
+        // Actually, we can't do a server side check of old password in case the old password expired and we are just changing it...
+        // so what if we have it do the update credentials flow first instead?
+        // If we remove this check, we are removing the "validation" that the user changing the password is the user that owns the account
+        const storedPassword = session.ISession.password;
+        if (storedPassword != null) {
+            // Passwords are not case sensitive
+            if (oldPassword.toLowerCase() !== storedPassword.toLowerCase()) {
+                Gui.errorMessage(vscode.l10n.t("Current password does not match the stored credentials. Password was not changed."));
+                return undefined;
+            }
+        } else if (session.ISession.user == null) {
+            Gui.errorMessage(vscode.l10n.t("Enter your credentials for this profile using Manage Profile -> Update Credentials, then try again."));
+            return undefined;
+        }
+
+        const newPassword = await Gui.showInputBox({
+            prompt: vscode.l10n.t("Enter new password"),
+            password: true,
+            ignoreFocusOut: true,
+            placeHolder: vscode.l10n.t("New Password"),
+        });
+        if (!newPassword) {
+            Gui.infoMessage(vscode.l10n.t("Operation cancelled"));
+            return undefined;
+        }
+        if (oldPassword.toLowerCase() === newPassword.toLowerCase()) {
+            Gui.errorMessage(vscode.l10n.t("New password cannot be the same as old password. Password was not changed."));
+            return undefined;
+        }
+
+        const confirmPassword = await Gui.showInputBox({
+            prompt: vscode.l10n.t("Confirm new password"),
+            password: true,
+            ignoreFocusOut: true,
+            placeHolder: vscode.l10n.t("Confirm New Password"),
+        });
+        if (!confirmPassword) {
+            Gui.infoMessage(vscode.l10n.t("Operation cancelled"));
+            return undefined;
+        }
+        if (newPassword.toLowerCase() !== confirmPassword.toLowerCase()) {
+            Gui.errorMessage(vscode.l10n.t("Passwords do not match. Password was not changed."));
+            return undefined;
+        }
+
+        try {
+            // The API reads the current password from the session,
+            // so supply the entered password when it is not stored locally and let the server validate it
+            session.ISession.password ??= oldPassword;
+            const response = await commonApi.changePassword(session, newPassword);
+            if (!response.success) {
+                throw new Error(response.message);
+            }
+        } catch (err) {
+            if (storedPassword == null) {
+                // Don't leave an unverified password on the cached session
+                session.ISession.password = undefined;
+            }
+            Gui.errorMessage(
+                vscode.l10n.t({
+                    message: "Failed to change password: {0}",
+                    args: [errorMessage(err)],
+                    comment: ["Error message"],
+                })
+            );
+            return undefined;
+        }
+
+        // Update the locally stored credentials with the new password
+        const profInfo = await cache.getProfileInfo();
+        await profInfo.updateProperty({
+            profileName: loadProfile.name,
+            profileType: loadProfile.type,
+            property: "password",
+            value: newPassword,
+            setSecure: options.secure ?? profInfo.isSecured(),
+        });
+        loadProfile.profile.password = session.ISession.password = newPassword;
+        imperative.AuthOrder.addCredsToSession(session.ISession, ZoweExplorerZosmf.CommonApi.getCommandArgs(loadProfile));
+        cache.updateCachedProfile(loadProfile, options.profileNode, apiRegister);
+        ZoweVsCodeExtension.onProfileUpdatedEmitter.fire(loadProfile);
+
+        return loadProfile;
     }
 
     /**

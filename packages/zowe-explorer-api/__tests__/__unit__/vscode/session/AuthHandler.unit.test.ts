@@ -393,6 +393,153 @@ describe("AuthHandler", () => {
             expect(errorMessageMock).toHaveBeenCalledTimes(1);
             expect(promptCredentials).toHaveBeenCalledTimes(1);
         });
+
+        describe("Change Password option", () => {
+            const invalidCredsMsg = "Username or password are not valid or expired";
+
+            function createBlockMocks({ supportsChangePassword = true } = {}): any {
+                const imperativeError = new ImperativeError({ additionalDetails: invalidCredsMsg, msg: invalidCredsMsg });
+                const testProfile = { name: TEST_PROFILE_NAME, type: "zosmf", profile: {} } as IProfileLoaded;
+                vi.spyOn(ZoweVsCodeExtension, "getZoweExplorerApi").mockReturnValue({
+                    getCommonApi: vi.fn().mockReturnValue(supportsChangePassword ? { changePassword: vi.fn() } : {}),
+                    getExplorerExtenderApi: vi.fn().mockReturnValue({
+                        getProfilesCache: vi.fn().mockReturnValue({ getLoadedProfConfig: vi.fn().mockResolvedValue(testProfile) }),
+                    }),
+                } as any);
+                return {
+                    imperativeError,
+                    authMethods: { promptCredentials: vi.fn(), ssoLogin: vi.fn() },
+                    changePasswordMock: vi.spyOn(ZoweVsCodeExtension, "changePassword"),
+                    errorMessageMock: vi.spyOn(Gui, "errorMessage").mockClear(),
+                    unlockProfileSpy: vi.spyOn(AuthHandler, "unlockProfile").mockClear().mockImplementation(() => {}),
+                };
+            }
+
+            it("offers the option and explains it when the profile supports changing passwords", async () => {
+                const blockMocks = createBlockMocks();
+                blockMocks.errorMessageMock.mockResolvedValueOnce("Update Credentials");
+                blockMocks.authMethods.promptCredentials.mockResolvedValue(["us3r", "p4ssw0rd"]);
+
+                await AuthHandler.promptForAuthentication(TEST_PROFILE_NAME, {
+                    authMethods: blockMocks.authMethods,
+                    imperativeError: blockMocks.imperativeError,
+                });
+
+                expect(blockMocks.errorMessageMock.mock.calls[0][0]).toContain("If your password has expired on the host");
+                expect(blockMocks.errorMessageMock.mock.calls[0][1].items).toEqual(["Update Credentials", "Change Password"]);
+            });
+
+            it("does not offer the option when the profile does not support changing passwords", async () => {
+                const blockMocks = createBlockMocks({ supportsChangePassword: false });
+                blockMocks.errorMessageMock.mockResolvedValueOnce(undefined);
+
+                await AuthHandler.promptForAuthentication(TEST_PROFILE_NAME, {
+                    authMethods: blockMocks.authMethods,
+                    imperativeError: blockMocks.imperativeError,
+                });
+
+                expect(blockMocks.errorMessageMock.mock.calls[0][0]).not.toContain("If your password has expired on the host");
+                expect(blockMocks.errorMessageMock.mock.calls[0][1].items).toEqual(["Update Credentials"]);
+            });
+
+            it("does not offer the option when the profile uses token authentication", async () => {
+                const blockMocks = createBlockMocks();
+                blockMocks.errorMessageMock.mockResolvedValueOnce(undefined);
+
+                await AuthHandler.promptForAuthentication(TEST_PROFILE_NAME, {
+                    authMethods: blockMocks.authMethods,
+                    imperativeError: new ImperativeError({ msg: invalidCredsMsg }),
+                    isUsingTokenAuth: true,
+                });
+
+                expect(blockMocks.errorMessageMock.mock.calls[0][1].items).toEqual(["Update Credentials"]);
+            });
+
+            it("unlocks the profile and returns true once the password is changed", async () => {
+                const blockMocks = createBlockMocks();
+                blockMocks.errorMessageMock.mockResolvedValueOnce("Change Password");
+                blockMocks.changePasswordMock.mockResolvedValueOnce({ name: TEST_PROFILE_NAME } as IProfileLoaded);
+
+                await expect(
+                    AuthHandler.promptForAuthentication(TEST_PROFILE_NAME, {
+                        authMethods: blockMocks.authMethods,
+                        imperativeError: blockMocks.imperativeError,
+                    })
+                ).resolves.toBe(true);
+
+                expect(blockMocks.changePasswordMock).toHaveBeenCalledWith({ serviceProfile: TEST_PROFILE_NAME });
+                expect(blockMocks.unlockProfileSpy).toHaveBeenCalledWith(TEST_PROFILE_NAME, true);
+                expect(blockMocks.authMethods.promptCredentials).not.toHaveBeenCalled();
+            });
+
+            it("returns false and keeps the profile locked when the password was not changed", async () => {
+                const blockMocks = createBlockMocks();
+                blockMocks.errorMessageMock.mockResolvedValueOnce("Change Password");
+                blockMocks.changePasswordMock.mockResolvedValueOnce(undefined);
+
+                await expect(
+                    AuthHandler.promptForAuthentication(TEST_PROFILE_NAME, {
+                        authMethods: blockMocks.authMethods,
+                        imperativeError: blockMocks.imperativeError,
+                    })
+                ).resolves.toBe(false);
+
+                expect(AuthHandler.wasAuthCancelled(TEST_PROFILE_NAME)).toBe(true);
+                expect(blockMocks.unlockProfileSpy).not.toHaveBeenCalled();
+            });
+
+            it("throws AuthCancelledError when the password change is cancelled and throwErrorOnCancel is true", async () => {
+                const blockMocks = createBlockMocks();
+                blockMocks.errorMessageMock.mockResolvedValueOnce("Change Password");
+                blockMocks.changePasswordMock.mockResolvedValueOnce(undefined);
+
+                await expect(
+                    AuthHandler.promptForAuthentication(TEST_PROFILE_NAME, {
+                        authMethods: blockMocks.authMethods,
+                        imperativeError: blockMocks.imperativeError,
+                        throwErrorOnCancel: true,
+                    })
+                ).rejects.toThrow(AuthCancelledError);
+            });
+
+            it("warns and returns false when the stored credentials could not be updated", async () => {
+                const blockMocks = createBlockMocks();
+                blockMocks.errorMessageMock.mockResolvedValueOnce("Change Password");
+                blockMocks.changePasswordMock.mockRejectedValueOnce(new Error("Disk write error"));
+                const warningMessageMock = vi.spyOn(Gui, "warningMessage").mockResolvedValueOnce(undefined);
+
+                await expect(
+                    AuthHandler.promptForAuthentication(TEST_PROFILE_NAME, {
+                        authMethods: blockMocks.authMethods,
+                        imperativeError: blockMocks.imperativeError,
+                        throwErrorOnCancel: true,
+                    })
+                ).resolves.toBe(false);
+
+                expect(warningMessageMock).toHaveBeenCalledWith(expect.stringContaining("Disk write error"));
+                expect(blockMocks.unlockProfileSpy).not.toHaveBeenCalled();
+            });
+
+            it("does not offer the option when no API is registered for the profile type", async () => {
+                const blockMocks = createBlockMocks();
+                vi.spyOn(ZoweVsCodeExtension, "getZoweExplorerApi").mockReturnValue({
+                    getCommonApi: vi.fn().mockImplementation(() => {
+                        throw new Error("No API");
+                    }),
+                    getExplorerExtenderApi: vi.fn().mockReturnValue({
+                        getProfilesCache: vi.fn().mockReturnValue({ getLoadedProfConfig: vi.fn().mockResolvedValue({}) }),
+                    }),
+                } as any);
+                blockMocks.errorMessageMock.mockResolvedValueOnce(undefined);
+
+                await AuthHandler.promptForAuthentication(TEST_PROFILE_NAME, {
+                    authMethods: blockMocks.authMethods,
+                    imperativeError: blockMocks.imperativeError,
+                });
+
+                expect(blockMocks.errorMessageMock.mock.calls[0][1].items).toEqual(["Update Credentials"]);
+            });
+        });
     });
 
     describe("AuthCancelledError", () => {

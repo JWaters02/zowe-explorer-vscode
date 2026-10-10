@@ -10,4 +10,5 @@
  */
 
 export * from "./BaseProfileAuth";
+export * from "./ChangePassword";
 export * from "./PromptCredentials";
