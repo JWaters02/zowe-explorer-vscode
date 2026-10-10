@@ -12,13 +12,17 @@
 import * as vscode from "vscode";
 import { FsAbstractUtils, IZoweTreeNode, ZoweScheme } from "@zowe/zowe-explorer-api";
 import { SharedContext } from "../trees/shared/SharedContext";
-import { ZoweLocalStorage } from "../tools/ZoweLocalStorage";
-import { Definitions } from "../configuration/Definitions";
 import { Constants } from "../configuration/Constants";
 import { SettingsConfig } from "../configuration/SettingsConfig";
 
-// Cached rule to avoid having to re-read in the setting for every file opened/tree node created or refreshed
 interface ReadOnlyRule {
+    profile?: string; // Mark whole profile read-only
+    pattern?: string; // Data set pattern
+    uss?: string; // USS path glob
+}
+
+// Cached rule to avoid having to re-read in the setting for every file opened/tree node created or refreshed
+interface CachedReadOnlyRule {
     profile?: string;
     matchesDs?: (dsName: string, member?: string) => boolean;
     uss?: RegExp;
@@ -34,7 +38,7 @@ interface ReadOnlyRule {
  */
 export class ReadOnlyManagement {
     private static overrides = new Map<string, boolean>(); // pattern, is read-only?
-    private static ruleCache: ReadOnlyRule[] | undefined;
+    private static ruleCache: CachedReadOnlyRule[] | undefined;
     private static changeEmitter = new vscode.EventEmitter<void>();
     public static readonly onDidChange = ReadOnlyManagement.changeEmitter.event;
 
@@ -172,9 +176,9 @@ export class ReadOnlyManagement {
     /**
      * Returns the rules from the settings with their patterns "compiled". The result is cached until the setting changes or extension restarts
      */
-    private static getReadOnlyRules(): ReadOnlyRule[] {
+    private static getReadOnlyRules(): CachedReadOnlyRule[] {
         if (ReadOnlyManagement.ruleCache == null) {
-            const rules = SettingsConfig.getDirectValue<Definitions.ReadOnlyRule[]>(Constants.SETTINGS_READ_ONLY_RULES);
+            const rules = SettingsConfig.getDirectValue<ReadOnlyRule[]>(Constants.SETTINGS_READ_ONLY_RULES);
             ReadOnlyManagement.ruleCache = (Array.isArray(rules) ? rules : [])
                 .filter((rule) => rule != null && (rule.profile != null || rule.pattern != null || rule.uss != null))
                 .map((rule) => ({
@@ -266,7 +270,8 @@ export class ReadOnlyManagement {
                 regex += "(?:/.*)?";
                 i += 2;
             } else if (glob.startsWith("**", i)) {
-                regex += ".*";
+                const isWholeSegment = i === 0 && (i + 2 === glob.length || glob[i + 2] === "/");
+                regex += isWholeSegment ? ".*" : "[^/]*";
                 i += 1;
             } else if (glob[i] === "*") {
                 regex += "[^/]*";
