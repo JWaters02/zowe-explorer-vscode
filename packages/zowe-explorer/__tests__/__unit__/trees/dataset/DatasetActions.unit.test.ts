@@ -6915,6 +6915,47 @@ describe("DatasetActions - downloading functions", () => {
             );
         });
 
+        it("should use the profile encoding when no encoding was chosen", async () => {
+            const profileWithEncoding = { ...defaultTestProfile, profile: { ...defaultTestProfile.profile, encoding: "IBM-1148" } };
+            mockGetDataSetDownloadOptions.mock.mockResolvedValue({ ...defaultDownloadOptions });
+
+            const pdsNode = new ZoweDatasetNode({
+                label: "TEST.PDS",
+                collapsibleState: vscode.TreeItemCollapsibleState.Collapsed,
+                parentNode: testMocks.datasetSessionNode,
+                profile: profileWithEncoding,
+            });
+
+            pdsNode.getProfile = vi.fn().mockReturnValue(profileWithEncoding);
+            pdsNode.getLabel = vi.fn().mockReturnValue("TEST.PDS");
+
+            mocked(testMocks.mvsApi.allMembers).mockResolvedValue({
+                success: true,
+                commandResponse: "",
+                apiResponse: { items: [{ member: "MEMBER1" }] },
+            });
+
+            const downloadAllMembersSpy = vi.spyOn(testMocks.mvsApi, "downloadAllMembers").mockResolvedValue({
+                success: true,
+                commandResponse: "",
+                apiResponse: {},
+            });
+
+            await DatasetActions.downloadAllMembers(pdsNode);
+
+            const downloadFn = mockExecuteDownloadWithProgress.mock.mock.calls[0][1];
+            await downloadFn();
+
+            expect(downloadAllMembersSpy).toHaveBeenCalledWith(
+                "TEST.PDS",
+                expect.objectContaining({
+                    record: false,
+                    encoding: "IBM-1148",
+                    binary: false,
+                })
+            );
+        });
+
         it("should report progress correctly", async () => {
             const pdsNode = new ZoweDatasetNode({
                 label: "TEST.PDS",
@@ -7197,6 +7238,53 @@ describe("DatasetActions - downloading functions", () => {
                     binary: false,
                 })
             );
+        });
+
+        it("should use the profile encoding when no encoding was chosen", async () => {
+            const profileWithEncoding = { ...defaultTestProfile, profile: { ...defaultTestProfile.profile, encoding: "IBM-1148" } };
+            const { memberNode } = createMemberNodes("TEST.PDS", "MEMBER1");
+            memberNode.getProfile = vi.fn().mockReturnValue(profileWithEncoding);
+
+            const getContentsSpy = vi.spyOn(testMocks.mvsApi, "getContents").mockResolvedValue({
+                success: true,
+                commandResponse: "",
+                apiResponse: { etag: "123" },
+            });
+
+            await (DatasetActions as any).downloadSingleMember(memberNode, { ...defaultDownloadOptions }, "txt");
+
+            expect(getContentsSpy).toHaveBeenCalledWith(
+                "TEST.PDS(MEMBER1)",
+                expect.objectContaining({
+                    record: false,
+                    encoding: "IBM-1148",
+                    binary: false,
+                })
+            );
+        });
+
+        it("should not use the profile encoding when an encoding was explicitly chosen", async () => {
+            const profileWithEncoding = { ...defaultTestProfile, profile: { ...defaultTestProfile.profile, encoding: "IBM-1148" } };
+            const { memberNode } = createMemberNodes("TEST.PDS", "MEMBER1");
+            memberNode.getProfile = vi.fn().mockReturnValue(profileWithEncoding);
+
+            const getContentsSpy = vi.spyOn(testMocks.mvsApi, "getContents").mockResolvedValue({
+                success: true,
+                commandResponse: "",
+                apiResponse: { etag: "123" },
+            });
+
+            await (DatasetActions as any).downloadSingleMember(memberNode, { ...defaultDownloadOptions, encoding: { kind: "binary" } }, "txt");
+            await (DatasetActions as any).downloadSingleMember(memberNode, { ...defaultDownloadOptions, encoding: { kind: "text" } }, "txt");
+            await (DatasetActions as any).downloadSingleMember(
+                memberNode,
+                { ...defaultDownloadOptions, encoding: { kind: "other", codepage: "IBM-037" } },
+                "txt"
+            );
+
+            expect(getContentsSpy).toHaveBeenNthCalledWith(1, "TEST.PDS(MEMBER1)", expect.objectContaining({ binary: true, encoding: undefined }));
+            expect(getContentsSpy).toHaveBeenNthCalledWith(2, "TEST.PDS(MEMBER1)", expect.objectContaining({ binary: false, encoding: undefined }));
+            expect(getContentsSpy).toHaveBeenNthCalledWith(3, "TEST.PDS(MEMBER1)", expect.objectContaining({ binary: false, encoding: "IBM-037" }));
         });
     });
 
@@ -8248,6 +8336,37 @@ describe("DatasetActions - downloading functions", () => {
                 expect.objectContaining({
                     record: true,
                     encoding: undefined,
+                    binary: false,
+                })
+            );
+        });
+
+        it("should use the profile encoding when no encoding was chosen", async () => {
+            const profileWithEncoding = { ...defaultTestProfile, profile: { ...defaultTestProfile.profile, encoding: "IBM-1148" } };
+            mockGetDataSetDownloadOptions.mock.mockResolvedValue({ ...defaultDownloadOptions });
+
+            const dsNode = new ZoweDatasetNode({
+                label: "TEST.DATASET.SEQ",
+                collapsibleState: vscode.TreeItemCollapsibleState.None,
+                parentNode: testMocks.datasetSessionNode,
+                profile: profileWithEncoding,
+            });
+
+            dsNode.getLabel = vi.fn().mockReturnValue("TEST.DATASET.SEQ");
+            dsNode.getProfile = vi.fn().mockReturnValue(profileWithEncoding);
+
+            const getContentsSpy = vi.spyOn(testMocks.mvsApi, "getContents").mockResolvedValue(undefined);
+
+            await DatasetActions.downloadDataSet(dsNode);
+
+            const downloadFn = mockExecuteDownloadWithProgress.mock.mock.calls[0][1];
+            await downloadFn();
+
+            expect(getContentsSpy).toHaveBeenCalledWith(
+                "TEST.DATASET.SEQ",
+                expect.objectContaining({
+                    record: false,
+                    encoding: "IBM-1148",
                     binary: false,
                 })
             );

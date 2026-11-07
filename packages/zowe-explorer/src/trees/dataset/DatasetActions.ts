@@ -832,6 +832,24 @@ export class DatasetActions {
         );
     }
 
+    private static getDownloadEncodingOptions(
+        encoding: ZosEncoding | undefined,
+        profile: imperative.IProfileLoaded
+    ): Pick<zosfiles.IDownloadOptions, "binary" | "record" | "encoding"> {
+        const isRecordEncoding = encoding?.kind === "other" && encoding.codepage?.toLowerCase() === "record";
+        let resolvedEncoding: string | undefined;
+        if (encoding == null) {
+            resolvedEncoding = profile?.profile?.encoding;
+        } else if (encoding.kind === "other" && !isRecordEncoding) {
+            resolvedEncoding = encoding.codepage;
+        }
+        return {
+            binary: encoding?.kind === "binary",
+            record: isRecordEncoding,
+            encoding: resolvedEncoding,
+        };
+    }
+
     private static resolveMemberExtension(datasetName: string, overrideExtension?: string): string {
         const resolvedExtension = overrideExtension ?? DatasetUtils.getExtension(datasetName) ?? zosfiles.ZosFilesUtils.DEFAULT_FILE_EXTENSION;
         return resolvedExtension.startsWith(".") ? resolvedExtension.slice(1) : resolvedExtension;
@@ -933,15 +951,12 @@ export class DatasetActions {
 
                 const generatedFileDirectory = DatasetActions.generateDirectoryPath(datasetName, selectedPath, generateDirectory, uppercaseNames);
 
-                const isRecordEncoding = encoding?.kind === "other" && encoding.codepage?.toLowerCase() === "record";
                 const downloadOptions: zosfiles.IDownloadOptions = {
                     directory: generatedFileDirectory,
                     maxConcurrentRequests,
                     preserveOriginalLetterCase: uppercaseNames,
                     extensionMap,
-                    binary: encoding?.kind === "binary",
-                    record: isRecordEncoding,
-                    encoding: encoding?.kind === "other" && !isRecordEncoding ? encoding.codepage : undefined,
+                    ...DatasetActions.getDownloadEncodingOptions(encoding, profile),
                     overwrite,
                     task,
                     responseTimeout: profile.profile?.responseTimeout,
@@ -977,12 +992,9 @@ export class DatasetActions {
             : selectedPath.fsPath;
         const filePath = path.join(targetDirectory, `${fileName}.${extension}`);
 
-        const isRecordEncoding = encoding?.kind === "other" && encoding.codepage?.toLowerCase() === "record";
         const downloadOptions = {
             file: filePath,
-            binary: encoding?.kind === "binary",
-            record: isRecordEncoding,
-            encoding: encoding?.kind === "other" && !isRecordEncoding ? encoding.codepage : undefined,
+            ...DatasetActions.getDownloadEncodingOptions(encoding, profile),
             overwrite,
             responseTimeout: profile?.profile?.responseTimeout,
         };
@@ -1202,12 +1214,9 @@ export class DatasetActions {
 
                 const filePath = path.join(targetDirectory, `${fileName}.${extension}`);
 
-                const isRecordEncoding = encoding?.kind === "other" && encoding.codepage?.toLowerCase() === "record";
                 const downloadOptions = {
                     file: filePath,
-                    binary: encoding?.kind === "binary",
-                    record: isRecordEncoding,
-                    encoding: encoding?.kind === "other" && !isRecordEncoding ? encoding.codepage : undefined,
+                    ...DatasetActions.getDownloadEncodingOptions(encoding, profile),
                     overwrite,
                     responseTimeout: profile?.profile?.responseTimeout,
                 };
